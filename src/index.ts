@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
+import { cors } from "hono/cors";
 import { initializeLucia } from "./lib/auth";
 import { hashPassword, verifyPassword, generateId } from "./lib/password";
 import { decryptPassword, validateRequest } from "./lib/decrypt";
@@ -19,6 +20,16 @@ type Variables = {
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// CORS middleware for OAuth endpoints
+app.use("/oauth/*", cors({
+  origin: "*", // 允许所有来源，生产环境可以限制为特定域名
+  allowMethods: ["GET", "POST", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization"],
+  exposeHeaders: ["Content-Length"],
+  maxAge: 600,
+  credentials: false,
+}));
 
 // Middleware to get current user
 app.use("*", async (c, next) => {

@@ -4,10 +4,13 @@ import { initializeLucia } from "./lib/auth";
 import { hashPassword, verifyPassword, generateId } from "./lib/password";
 import { decryptPassword, validateRequest } from "./lib/decrypt";
 import { verifyPKCE, validateCodeChallenge, validateCodeVerifier } from "./lib/pkce";
+import { verifyTurnstile } from "./lib/turnstile";
 import * as html from "./lib/html";
 
 type Bindings = {
   DB: D1Database;
+  TURNSTILE_SECRET_KEY: string;
+  TURNSTILE_SITE_KEY: string;
 };
 
 type Variables = {
@@ -63,7 +66,7 @@ app.get("/login", async (c) => {
     return c.redirect("/");
   }
 
-  return c.html(html.loginForm());
+  return c.html(html.loginForm(undefined, c.env.TURNSTILE_SITE_KEY));
 });
 
 // Login handler
@@ -75,14 +78,27 @@ app.post("/login", async (c) => {
   const nonce = formData.get("nonce")?.toString();
   const fingerprint = formData.get("fp")?.toString();
   const timestamp = formData.get("ts")?.toString();
+  const turnstileToken = formData.get("cf-turnstile-response")?.toString();
 
   if (!username || !encryptedPassword) {
-    return c.html(html.loginForm("用户名和密码不能为空"), 400);
+    return c.html(html.loginForm("用户名和密码不能为空", c.env.TURNSTILE_SITE_KEY), 400);
+  }
+
+  // Verify Turnstile token
+  if (!turnstileToken) {
+    return c.html(html.loginForm("请完成人机验证", c.env.TURNSTILE_SITE_KEY), 400);
+  }
+
+  const remoteIp = c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For");
+  const turnstileValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET_KEY, remoteIp);
+
+  if (!turnstileValid) {
+    return c.html(html.loginForm("人机验证失败，请重试", c.env.TURNSTILE_SITE_KEY), 400);
   }
 
   // Validate request parameters
   if (!validateRequest(nonce || null, fingerprint || null, timestamp || null)) {
-    return c.html(html.loginForm("请求参数无效"), 400);
+    return c.html(html.loginForm("请求参数无效", c.env.TURNSTILE_SITE_KEY), 400);
   }
 
   try {
@@ -94,13 +110,13 @@ app.post("/login", async (c) => {
     ).bind(username).first();
 
     if (!result) {
-      return c.html(html.loginForm("用户名或密码错误"), 400);
+      return c.html(html.loginForm("用户名或密码错误", c.env.TURNSTILE_SITE_KEY), 400);
     }
 
     const validPassword = await verifyPassword(password, result.hashed_password as string);
 
     if (!validPassword) {
-      return c.html(html.loginForm("用户名或密码错误"), 400);
+      return c.html(html.loginForm("用户名或密码错误", c.env.TURNSTILE_SITE_KEY), 400);
     }
 
     const session = await lucia.createSession(result.id as string, {});
@@ -110,7 +126,7 @@ app.post("/login", async (c) => {
     return c.redirect("/");
   } catch (error) {
     console.error("Login error:", error);
-    return c.html(html.loginForm("登录失败，请重试"), 500);
+    return c.html(html.loginForm("登录失败，请重试", c.env.TURNSTILE_SITE_KEY), 500);
   }
 });
 
@@ -121,7 +137,7 @@ app.get("/register", async (c) => {
     return c.redirect("/");
   }
 
-  return c.html(html.registerForm());
+  return c.html(html.registerForm(undefined, c.env.TURNSTILE_SITE_KEY));
 });
 
 // Register handler
@@ -135,14 +151,27 @@ app.post("/register", async (c) => {
   const nonce = formData.get("nonce")?.toString();
   const fingerprint = formData.get("fp")?.toString();
   const timestamp = formData.get("ts")?.toString();
+  const turnstileToken = formData.get("cf-turnstile-response")?.toString();
 
   if (!username || !email || !encryptedPassword) {
-    return c.html(html.registerForm("所有必填项不能为空"), 400);
+    return c.html(html.registerForm("所有必填项不能为空", c.env.TURNSTILE_SITE_KEY), 400);
+  }
+
+  // Verify Turnstile token
+  if (!turnstileToken) {
+    return c.html(html.registerForm("请完成人机验证", c.env.TURNSTILE_SITE_KEY), 400);
+  }
+
+  const remoteIp = c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For");
+  const turnstileValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET_KEY, remoteIp);
+
+  if (!turnstileValid) {
+    return c.html(html.registerForm("人机验证失败，请重试", c.env.TURNSTILE_SITE_KEY), 400);
   }
 
   // Validate request parameters
   if (!validateRequest(nonce || null, fingerprint || null, timestamp || null)) {
-    return c.html(html.registerForm("请求参数无效"), 400);
+    return c.html(html.registerForm("请求参数无效", c.env.TURNSTILE_SITE_KEY), 400);
   }
 
   try {
@@ -150,7 +179,7 @@ app.post("/register", async (c) => {
     const password = decryptPassword(encryptedPassword);
 
     if (password.length < 8) {
-      return c.html(html.registerForm("密码长度至少为 8 个字符"), 400);
+      return c.html(html.registerForm("密码长度至少为 8 个字符", c.env.TURNSTILE_SITE_KEY), 400);
     }
 
     const existingUser = await c.env.DB.prepare(
@@ -158,7 +187,7 @@ app.post("/register", async (c) => {
     ).bind(username, email).first();
 
     if (existingUser) {
-      return c.html(html.registerForm("用户名或邮箱已被使用"), 400);
+      return c.html(html.registerForm("用户名或邮箱已被使用", c.env.TURNSTILE_SITE_KEY), 400);
     }
 
     const userId = generateId();
@@ -176,7 +205,7 @@ app.post("/register", async (c) => {
     return c.redirect("/");
   } catch (error) {
     console.error("Registration error:", error);
-    return c.html(html.registerForm("注册失败，请重试"), 500);
+    return c.html(html.registerForm("注册失败，请重试", c.env.TURNSTILE_SITE_KEY), 500);
   }
 });
 

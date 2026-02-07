@@ -301,6 +301,7 @@ export function renderPage(title: string, content: string): string {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <style>${styles}</style>
   <script>
     // Client-side encryption utilities
@@ -341,6 +342,13 @@ export function renderPage(title: string, content: string): string {
       const form = event.target;
       const passwordInput = form.querySelector('input[name="password"]');
       const originalPassword = passwordInput.value;
+
+      // Check Turnstile token
+      const turnstileResponse = form.querySelector('input[name="cf-turnstile-response"]');
+      if (!turnstileResponse || !turnstileResponse.value) {
+        alert('请完成人机验证');
+        return false;
+      }
 
       // Encrypt password
       const encryptedPassword = await encryptPassword(originalPassword);
@@ -389,7 +397,8 @@ export function renderPage(title: string, content: string): string {
 </html>`;
 }
 
-export function loginForm(error?: string): string {
+export function loginForm(error?: string, siteKey?: string): string {
+  const turnstileSiteKey = siteKey || '1x00000000000000000000AA'; // Default test key
   return renderPage("登录", `
     ${error ? `<div class="error">⚠️ ${error}</div>` : ""}
     <form method="POST" action="/login" onsubmit="handleFormSubmit(event)">
@@ -401,6 +410,9 @@ export function loginForm(error?: string): string {
         <label for="password">密码</label>
         <input type="password" id="password" name="password" required placeholder="请输入密码" autocomplete="current-password">
       </div>
+      <div class="form-group" style="display: flex; justify-content: center;">
+        <div class="cf-turnstile" data-sitekey="${turnstileSiteKey}" data-theme="dark"></div>
+      </div>
       <button type="submit">登录</button>
     </form>
     <div class="link">
@@ -409,7 +421,8 @@ export function loginForm(error?: string): string {
   `);
 }
 
-export function registerForm(error?: string): string {
+export function registerForm(error?: string, siteKey?: string): string {
+  const turnstileSiteKey = siteKey || '1x00000000000000000000AA'; // Default test key
   return renderPage("注册", `
     ${error ? `<div class="error">⚠️ ${error}</div>` : ""}
     <form method="POST" action="/register" onsubmit="handleFormSubmit(event)">
@@ -428,6 +441,9 @@ export function registerForm(error?: string): string {
       <div class="form-group">
         <label for="display_name">昵称（可选）</label>
         <input type="text" id="display_name" name="display_name" placeholder="你想被如何称呼？">
+      </div>
+      <div class="form-group" style="display: flex; justify-content: center;">
+        <div class="cf-turnstile" data-sitekey="${turnstileSiteKey}" data-theme="dark"></div>
       </div>
       <button type="submit">完成注册</button>
     </form>

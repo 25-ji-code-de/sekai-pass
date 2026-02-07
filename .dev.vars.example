@@ -6,3 +6,8 @@
 
 # 会话密钥（生产环境必须设置）
 # SESSION_SECRET=your-secret-key-here
+
+# Cloudflare Turnstile 配置
+# 获取密钥: https://dash.cloudflare.com/?to=/:account/turnstile
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA

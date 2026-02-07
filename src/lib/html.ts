@@ -289,6 +289,131 @@ export const styles = `
   .btn-deny:hover {
     box-shadow: 0 8px 25px rgba(255, 71, 87, 0.5);
   }
+
+  /* Authorize Page Specifics */
+  .auth-header {
+    text-align: center;
+    margin-bottom: 32px;
+    position: relative;
+    animation: fadeIn 0.5s ease-out;
+  }
+  
+  .app-icon {
+    width: 72px;
+    height: 72px;
+    background: var(--primary-gradient);
+    border-radius: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: 700;
+    color: white;
+    margin: 0 auto 20px;
+    box-shadow: 0 10px 30px rgba(136, 84, 208, 0.4);
+    text-transform: uppercase;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .auth-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text-main);
+  }
+  
+  .auth-subtitle {
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .permission-box {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 32px;
+    animation: fadeIn 0.5s ease-out 0.1s backwards;
+  }
+
+  .permission-header {
+    margin-bottom: 16px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .permission-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    font-size: 14px;
+    color: #e0e0e0;
+    line-height: 1.5;
+  }
+  
+  .permission-icon {
+    color: var(--success-color);
+    flex-shrink: 0;
+    margin-top: 3px;
+    filter: drop-shadow(0 0 8px rgba(81, 207, 102, 0.4));
+  }
+
+  .permission-title {
+    font-weight: 500;
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  .permission-desc {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .user-badge {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 6px 16px;
+    border-radius: 50px;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  
+  .user-badge strong {
+    color: var(--text-main);
+    margin-left: 6px;
+  }
+  
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: none;
+    margin-top: 0;
+    color: var(--text-muted);
+  }
+  
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: var(--text-main);
+    transform: translateY(-2px);
+    box-shadow: none;
+  }
+
+  .privacy-note {
+    text-align: center;
+    margin-top: 24px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.3);
+    padding: 0 20px;
+    line-height: 1.5;
+  }
 `;
 
 export function renderPage(title: string, content: string): string {
@@ -468,16 +593,27 @@ export function dashboardPage(user: any): string {
 }
 
 export function authorizePage(app: any, user: any): string {
+  const initial = app.name ? app.name.charAt(0).toUpperCase() : 'A';
   return renderPage("授权访问", `
-    <div style="text-align: center; margin-bottom: 24px;">
-      <p style="font-size: 16px; margin-bottom: 8px;"><strong>${app.name}</strong> 请求访问您的信息</p>
-      <p style="color: var(--text-muted); font-size: 13px;">当前登录: ${user.username}</p>
+    <div class="auth-header">
+      <div class="app-icon">${initial}</div>
+      <h2 class="auth-title">授权 ${app.name} 访问</h2>
+      <p class="auth-subtitle">该应用希望通过 SEKAI Pass 登录</p>
+      <div class="user-badge">
+        <span>当前身份</span> 
+        <strong>${user.username}</strong>
+      </div>
     </div>
 
-    <div class="user-info" style="border-left: 3px solid #8854d0;">
-      <p style="border:none; padding:0; margin:0; justify-content: flex-start;">
-        <span style="color: #dcdcdc;">该应用将获取您的公开个人资料。</span>
-      </p>
+    <div class="permission-box">
+      <div class="permission-header">请求权限</div>
+      <div class="permission-item">
+        <svg class="permission-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        <div>
+          <span class="permission-title">访问您的公开个人资料</span>
+          <div class="permission-desc">该应用可以查看您的用户名、头像及公开ID</div>
+        </div>
+      </div>
     </div>
 
     <form method="POST" action="/oauth/authorize">
@@ -487,8 +623,11 @@ export function authorizePage(app: any, user: any): string {
       ${app.code_challenge_method ? `<input type="hidden" name="code_challenge_method" value="${app.code_challenge_method}">` : ''}
 
       <div class="authorize-actions">
-         <button type="submit" name="action" value="deny" class="btn-deny" style="margin-top: 0;">拒绝访问</button>
-         <button type="submit" name="action" value="allow" style="margin-top: 0;">允许授权</button>
+        <button type="submit" name="action" value="allow">确认授权</button>
+        <button type="submit" name="action" value="deny" class="btn-secondary">取消</button>
+      </div>
+      <div class="privacy-note">
+        授权即代表您同意该应用按照其服务条款和隐私政策使用您的信息。
       </div>
     </form>
   `);

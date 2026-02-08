@@ -88,9 +88,12 @@ app.get("/.well-known/oauth-authorization-server", async (c) => {
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code"],
     code_challenge_methods_supported: ["S256", "plain"],
-    token_endpoint_auth_methods_supported: ["client_secret_post", "none"],
+    token_endpoint_auth_methods_supported: ["none"],
     service_documentation: `${baseUrl}/docs`,
-    ui_locales_supported: ["zh-CN", "en-US"]
+    ui_locales_supported: ["zh-CN", "en-US"],
+    // OAuth 2.1: PKCE is mandatory
+    require_pushed_authorization_requests: false,
+    require_request_uri_registration: false
   });
 });
 
@@ -114,8 +117,12 @@ app.get("/oauth/authorize", async (c) => {
     return c.text("Invalid request", 400);
   }
 
-  // Validate PKCE parameters if provided
-  if (codeChallenge && !validateCodeChallenge(codeChallenge, codeChallengeMethod)) {
+  // OAuth 2.1: PKCE is mandatory for all clients
+  if (!codeChallenge) {
+    return c.text("code_challenge is required (PKCE mandatory)", 400);
+  }
+
+  if (!validateCodeChallenge(codeChallenge, codeChallengeMethod)) {
     return c.text("Invalid code_challenge", 400);
   }
 
@@ -223,29 +230,37 @@ app.post("/oauth/token", async (c) => {
     return c.json({ error: "invalid_grant" }, 400);
   }
 
-  // PKCE verification
+  // OAuth 2.1: PKCE verification is mandatory
   const codeChallenge = authCode.code_challenge as string | null;
   const codeChallengeMethod = authCode.code_challenge_method as string | null;
 
-  if (codeChallenge) {
-    if (!codeVerifier) {
-      return c.json({ error: "invalid_request", error_description: "code_verifier required" }, 400);
-    }
+  if (!codeChallenge) {
+    return c.json({
+      error: "invalid_grant",
+      error_description: "Authorization code was not issued with PKCE"
+    }, 400);
+  }
 
-    if (!validateCodeVerifier(codeVerifier)) {
-      return c.json({ error: "invalid_request", error_description: "invalid code_verifier" }, 400);
-    }
+  if (!codeVerifier) {
+    return c.json({
+      error: "invalid_request",
+      error_description: "code_verifier is required"
+    }, 400);
+  }
 
-    const isValid = await verifyPKCE(codeVerifier, codeChallenge, codeChallengeMethod || "S256");
-    if (!isValid) {
-      return c.json({ error: "invalid_grant", error_description: "code_verifier mismatch" }, 400);
-    }
-  } else {
-    const isPublicClient = !app.client_secret || app.client_secret === "public";
+  if (!validateCodeVerifier(codeVerifier)) {
+    return c.json({
+      error: "invalid_request",
+      error_description: "invalid code_verifier format"
+    }, 400);
+  }
 
-    if (!isPublicClient && app.client_secret !== clientSecret) {
-      return c.json({ error: "invalid_client" }, 401);
-    }
+  const isValid = await verifyPKCE(codeVerifier, codeChallenge, codeChallengeMethod || "S256");
+  if (!isValid) {
+    return c.json({
+      error: "invalid_grant",
+      error_description: "code_verifier does not match code_challenge"
+    }, 400);
   }
 
   await c.env.DB.prepare("DELETE FROM auth_codes WHERE code = ?").bind(code).run();

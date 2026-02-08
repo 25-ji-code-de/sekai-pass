@@ -273,12 +273,17 @@ apiRouter.post("/oauth/authorize", async (c) => {
       return c.json({ error: "缺少必要参数" }, 400);
     }
 
+    // OAuth 2.1: PKCE is mandatory for all clients
+    if (!code_challenge) {
+      return c.json({ error: "code_challenge is required (PKCE mandatory)" }, 400);
+    }
+
     const code = generateId(32);
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     await c.env.DB.prepare(
       "INSERT INTO auth_codes (code, user_id, client_id, redirect_uri, expires_at, code_challenge, code_challenge_method, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(code, user.id, client_id, redirect_uri, expiresAt, code_challenge || null, code_challenge_method || null, state || null).run();
+    ).bind(code, user.id, client_id, redirect_uri, expiresAt, code_challenge, code_challenge_method || 'S256', state || null).run();
 
     return c.json({
       success: true,

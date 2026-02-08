@@ -12,6 +12,9 @@ Cloudflare Workers と Lucia Auth を使用した、モダンで安全な認証�
 - 🗄️ D1 データベースによるデータ永続化
 - 🔄 OAuth 2.0 Authorization Code フロー対応
 - 🎯 Hono フレームワークによる高速ルーティング
+- 🚀 **前後端分離架構** - RESTful API + SPA
+- 📱 **双系统支持** - 标准 OAuth 2.0 + 现代 API
+- 🔒 **PKCE 支持** - 增强公共客户端安全性
 
 ## 📦 セットアップ
 
@@ -134,22 +137,41 @@ curl https://your-domain.workers.dev/oauth/userinfo \
 
 ## 🛣️ API エンドポイント
 
-### 認証
+### 前端路由（SPA）
+
+| パス | 説明 |
+|------|------|
+| `/` | 仪表盘（需要登录） |
+| `/login` | 登录页面 |
+| `/register` | 注册页面 |
+| `/oauth/authorize` | OAuth 授权页面 |
+
+### RESTful API（新增）
+
+所有 API 端点返回 JSON 格式，HTTP 401 表示 Token 过期。
+
+#### 认证 API
 
 | メソッド | パス | 説明 |
 |---------|------|------|
-| GET | `/login` | ログインページ |
-| POST | `/login` | ログイン処理 |
-| GET | `/register` | 登録ページ |
-| POST | `/register` | 登録処理 |
-| POST | `/logout` | ログアウト |
+| POST | `/api/auth/login` | 用户登录（返回 token） |
+| POST | `/api/auth/register` | 用户注册（返回 token） |
+| GET | `/api/auth/me` | 获取当前用户信息 |
+| POST | `/api/auth/logout` | 用户登出 |
 
-### OAuth 2.0
+#### OAuth API
 
 | メソッド | パス | 説明 |
 |---------|------|------|
-| GET | `/oauth/authorize` | 認証エンドポイント |
-| POST | `/oauth/authorize` | 認証承認処理 |
+| GET | `/api/oauth/app-info` | 获取应用信息 |
+| POST | `/api/oauth/authorize` | OAuth 授权（JSON 版本） |
+
+### 标准 OAuth 2.0（保留兼容）
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/oauth/authorize` | 认证端点（HTML） |
+| POST | `/oauth/authorize` | 认证承认处理（表单） |
 | POST | `/oauth/token` | トークンエンドポイント |
 | GET | `/oauth/userinfo` | ユーザー情報エンドポイント |
 
@@ -212,24 +234,32 @@ CREATE TABLE auth_codes (
 - ✅ 認証コードは10分間有効
 - ✅ セッション自動更新
 
+## 📚 文档
+
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - 架构详细说明
+- **[API_EXAMPLES.md](./API_EXAMPLES.md)** - API 使用示例和测试方法
+- **[MIGRATION.md](./MIGRATION.md)** - 前后端分离改造说明
+- **[PKCE.md](./PKCE.md)** - PKCE 流程说明
+
 ## 🎨 カスタマイズ
 
 ### UI のカスタマイズ
 
-`src/lib/html.ts` の `styles` 変数を編集してテーマをカスタマイズできます：
+前端样式文件位于 `public/css/styles.css`，可以直接编辑：
 
-```typescript
-export const styles = `
-  body {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-    // カスタムカラーに変更
-  }
-`;
+```css
+:root {
+  --bg-color: #0b0b0e;
+  --primary-color: #a48cd6;
+  /* 自定义颜色 */
+}
 ```
 
 ### 認証フローのカスタマイズ
 
-`src/index.ts` でルートハンドラーを編集して、認証フローをカスタマイズできます。
+- **API 路由**: 编辑 `src/lib/api.ts`
+- **OAuth 路由**: 编辑 `src/index.ts`
+- **前端页面**: 编辑 `public/js/pages/*.js`
 
 ## 📝 開発メモ
 

@@ -1,12 +1,12 @@
 import { Hono } from "hono";
-import { getCookie, setCookie, deleteCookie } from "hono/cookie";
+import { getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
 import { initializeLucia } from "./lib/auth";
-import { hashPassword, verifyPassword, generateId } from "./lib/password";
-import { decryptPassword, validateRequest } from "./lib/decrypt";
+import { generateId } from "./lib/password";
 import { verifyPKCE, validateCodeChallenge, validateCodeVerifier } from "./lib/pkce";
 import { verifyTurnstile } from "./lib/turnstile";
 import * as html from "./lib/html";
+import { apiRouter } from "./lib/api";
 
 type Bindings = {
   DB: D1Database;
@@ -22,9 +22,18 @@ type Variables = {
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// CORS middleware for OAuth endpoints
+// CORS middleware for API and OAuth endpoints
+app.use("/api/*", cors({
+  origin: "*",
+  allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization"],
+  exposeHeaders: ["Content-Length"],
+  maxAge: 600,
+  credentials: false,
+}));
+
 app.use("/oauth/*", cors({
-  origin: "*", // 允许所有来源，生产环境可以限制为特定域名
+  origin: "*",
   allowMethods: ["GET", "POST", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"],
   exposeHeaders: ["Content-Length"],
@@ -32,8 +41,11 @@ app.use("/oauth/*", cors({
   credentials: false,
 }));
 
-// Middleware to get current user
-app.use("*", async (c, next) => {
+// Mount API router
+app.route("/api", apiRouter);
+
+// Middleware to get current user (for traditional OAuth flow)
+app.use("/oauth/*", async (c, next) => {
   const lucia = initializeLucia(c.env.DB);
   const sessionId = getCookie(c, lucia.sessionCookieName);
 
@@ -60,183 +72,11 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// Home page
-app.get("/", async (c) => {
-  const user = c.get("user");
+// ============================================
+// Traditional OAuth 2.0 Endpoints (保留用于第三方接入)
+// ============================================
 
-  if (user) {
-    return c.html(html.dashboardPage(user));
-  }
-
-  return c.redirect("/login");
-});
-
-// Login page
-app.get("/login", async (c) => {
-  const user = c.get("user");
-  if (user) {
-    return c.redirect("/");
-  }
-
-  return c.html(html.loginForm(undefined, c.env.TURNSTILE_SITE_KEY));
-});
-
-// Login handler
-app.post("/login", async (c) => {
-  const lucia = initializeLucia(c.env.DB);
-  const formData = await c.req.formData();
-  const username = formData.get("username")?.toString();
-  const encryptedPassword = formData.get("p")?.toString();
-  const nonce = formData.get("nonce")?.toString();
-  const fingerprint = formData.get("fp")?.toString();
-  const timestamp = formData.get("ts")?.toString();
-  const turnstileToken = formData.get("cf-turnstile-response")?.toString();
-
-  if (!username || !encryptedPassword) {
-    return c.html(html.loginForm("用户名和密码不能为空", c.env.TURNSTILE_SITE_KEY), 400);
-  }
-
-  // Verify Turnstile token
-  if (!turnstileToken) {
-    return c.html(html.loginForm("请完成人机验证", c.env.TURNSTILE_SITE_KEY), 400);
-  }
-
-  const remoteIp = c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For");
-  const turnstileValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET_KEY, remoteIp);
-
-  if (!turnstileValid) {
-    return c.html(html.loginForm("人机验证失败，请重试", c.env.TURNSTILE_SITE_KEY), 400);
-  }
-
-  // Validate request parameters
-  if (!validateRequest(nonce || null, fingerprint || null, timestamp || null)) {
-    return c.html(html.loginForm("请求参数无效", c.env.TURNSTILE_SITE_KEY), 400);
-  }
-
-  try {
-    // Decrypt password
-    const password = decryptPassword(encryptedPassword);
-
-    const result = await c.env.DB.prepare(
-      "SELECT * FROM users WHERE username = ?"
-    ).bind(username).first();
-
-    if (!result) {
-      return c.html(html.loginForm("用户名或密码错误", c.env.TURNSTILE_SITE_KEY), 400);
-    }
-
-    const validPassword = await verifyPassword(password, result.hashed_password as string);
-
-    if (!validPassword) {
-      return c.html(html.loginForm("用户名或密码错误", c.env.TURNSTILE_SITE_KEY), 400);
-    }
-
-    const session = await lucia.createSession(result.id as string, {});
-    const sessionCookie = lucia.createSessionCookie(session.id);
-    setCookie(c, sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
-
-    return c.redirect("/");
-  } catch (error) {
-    console.error("Login error:", error);
-    return c.html(html.loginForm("登录失败，请重试", c.env.TURNSTILE_SITE_KEY), 500);
-  }
-});
-
-// Register page
-app.get("/register", async (c) => {
-  const user = c.get("user");
-  if (user) {
-    return c.redirect("/");
-  }
-
-  return c.html(html.registerForm(undefined, c.env.TURNSTILE_SITE_KEY));
-});
-
-// Register handler
-app.post("/register", async (c) => {
-  const lucia = initializeLucia(c.env.DB);
-  const formData = await c.req.formData();
-  const username = formData.get("username")?.toString();
-  const email = formData.get("email")?.toString();
-  const encryptedPassword = formData.get("p")?.toString();
-  const displayName = formData.get("display_name")?.toString() || null;
-  const nonce = formData.get("nonce")?.toString();
-  const fingerprint = formData.get("fp")?.toString();
-  const timestamp = formData.get("ts")?.toString();
-  const turnstileToken = formData.get("cf-turnstile-response")?.toString();
-
-  if (!username || !email || !encryptedPassword) {
-    return c.html(html.registerForm("所有必填项不能为空", c.env.TURNSTILE_SITE_KEY), 400);
-  }
-
-  // Verify Turnstile token
-  if (!turnstileToken) {
-    return c.html(html.registerForm("请完成人机验证", c.env.TURNSTILE_SITE_KEY), 400);
-  }
-
-  const remoteIp = c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For");
-  const turnstileValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET_KEY, remoteIp);
-
-  if (!turnstileValid) {
-    return c.html(html.registerForm("人机验证失败，请重试", c.env.TURNSTILE_SITE_KEY), 400);
-  }
-
-  // Validate request parameters
-  if (!validateRequest(nonce || null, fingerprint || null, timestamp || null)) {
-    return c.html(html.registerForm("请求参数无效", c.env.TURNSTILE_SITE_KEY), 400);
-  }
-
-  try {
-    // Decrypt password
-    const password = decryptPassword(encryptedPassword);
-
-    if (password.length < 8) {
-      return c.html(html.registerForm("密码长度至少为 8 个字符", c.env.TURNSTILE_SITE_KEY), 400);
-    }
-
-    const existingUser = await c.env.DB.prepare(
-      "SELECT id FROM users WHERE username = ? OR email = ?"
-    ).bind(username, email).first();
-
-    if (existingUser) {
-      return c.html(html.registerForm("用户名或邮箱已被使用", c.env.TURNSTILE_SITE_KEY), 400);
-    }
-
-    const userId = generateId();
-    const hashedPassword = await hashPassword(password);
-    const now = Date.now();
-
-    await c.env.DB.prepare(
-      "INSERT INTO users (id, username, email, hashed_password, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).bind(userId, username, email, hashedPassword, displayName, now, now).run();
-
-    const session = await lucia.createSession(userId, {});
-    const sessionCookie = lucia.createSessionCookie(session.id);
-    setCookie(c, sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
-
-    return c.redirect("/");
-  } catch (error) {
-    console.error("Registration error:", error);
-    return c.html(html.registerForm("注册失败，请重试", c.env.TURNSTILE_SITE_KEY), 500);
-  }
-});
-
-// Logout handler
-app.post("/logout", async (c) => {
-  const lucia = initializeLucia(c.env.DB);
-  const session = c.get("session");
-
-  if (session) {
-    await lucia.invalidateSession(session.id);
-  }
-
-  const sessionCookie = lucia.createBlankSessionCookie();
-  setCookie(c, sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
-
-  return c.redirect("/login");
-});
-
-// OAuth authorization endpoint
+// OAuth authorization endpoint (traditional flow with HTML)
 app.get("/oauth/authorize", async (c) => {
   const user = c.get("user");
 
@@ -273,7 +113,6 @@ app.get("/oauth/authorize", async (c) => {
     return c.text("Invalid redirect URI", 400);
   }
 
-  // Store PKCE parameters in form (will be used in POST handler)
   return c.html(html.authorizePage(
     {
       name: app.name,
@@ -286,7 +125,7 @@ app.get("/oauth/authorize", async (c) => {
   ));
 });
 
-// OAuth authorization handler
+// OAuth authorization handler (traditional flow)
 app.post("/oauth/authorize", async (c) => {
   const user = c.get("user");
 
@@ -313,7 +152,6 @@ app.post("/oauth/authorize", async (c) => {
     const code = generateId(32);
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
-    // Store authorization code with PKCE challenge
     await c.env.DB.prepare(
       "INSERT INTO auth_codes (code, user_id, client_id, redirect_uri, expires_at, code_challenge, code_challenge_method) VALUES (?, ?, ?, ?, ?, ?, ?)"
     ).bind(code, user.id, clientId, redirectUri, expiresAt, codeChallenge, codeChallengeMethod).run();
@@ -325,7 +163,7 @@ app.post("/oauth/authorize", async (c) => {
   }
 });
 
-// OAuth token endpoint
+// OAuth token endpoint (standard OAuth 2.0)
 app.post("/oauth/token", async (c) => {
   const formData = await c.req.formData();
   const grantType = formData.get("grant_type")?.toString();
@@ -338,7 +176,6 @@ app.post("/oauth/token", async (c) => {
     return c.json({ error: "invalid_request" }, 400);
   }
 
-  // 查找应用
   const app = await c.env.DB.prepare(
     "SELECT * FROM applications WHERE client_id = ?"
   ).bind(clientId).first();
@@ -347,7 +184,6 @@ app.post("/oauth/token", async (c) => {
     return c.json({ error: "invalid_client" }, 401);
   }
 
-  // 获取授权码
   const authCode = await c.env.DB.prepare(
     "SELECT * FROM auth_codes WHERE code = ? AND client_id = ?"
   ).bind(code, clientId).first();
@@ -356,28 +192,24 @@ app.post("/oauth/token", async (c) => {
     return c.json({ error: "invalid_grant" }, 400);
   }
 
-  // PKCE 验证
+  // PKCE verification
   const codeChallenge = authCode.code_challenge as string | null;
   const codeChallengeMethod = authCode.code_challenge_method as string | null;
 
   if (codeChallenge) {
-    // 如果有 code_challenge，必须提供 code_verifier
     if (!codeVerifier) {
       return c.json({ error: "invalid_request", error_description: "code_verifier required" }, 400);
     }
 
-    // 验证 code_verifier 格式
     if (!validateCodeVerifier(codeVerifier)) {
       return c.json({ error: "invalid_request", error_description: "invalid code_verifier" }, 400);
     }
 
-    // 验证 PKCE
     const isValid = await verifyPKCE(codeVerifier, codeChallenge, codeChallengeMethod || "S256");
     if (!isValid) {
       return c.json({ error: "invalid_grant", error_description: "code_verifier mismatch" }, 400);
     }
   } else {
-    // 没有 PKCE，检查 client_secret（传统方式）
     const isPublicClient = !app.client_secret || app.client_secret === "public";
 
     if (!isPublicClient && app.client_secret !== clientSecret) {
@@ -385,10 +217,8 @@ app.post("/oauth/token", async (c) => {
     }
   }
 
-  // 删除已使用的授权码
   await c.env.DB.prepare("DELETE FROM auth_codes WHERE code = ?").bind(code).run();
 
-  // 创建会话
   const lucia = initializeLucia(c.env.DB);
   const session = await lucia.createSession(authCode.user_id as string, {});
 
@@ -399,7 +229,7 @@ app.post("/oauth/token", async (c) => {
   });
 });
 
-// User info endpoint
+// User info endpoint (standard OAuth 2.0)
 app.get("/oauth/userinfo", async (c) => {
   const authorization = c.req.header("Authorization");
 
@@ -423,20 +253,47 @@ app.get("/oauth/userinfo", async (c) => {
   });
 });
 
-// Static file serving - delegate to Cloudflare Assets
-app.get("/:filename{.+\\.(md|MD)$}", async (c) => {
-  return c.env.ASSETS.fetch(c.req.raw);
-});
+// ============================================
+// Static file serving
+// ============================================
 
-app.get("/LICENSE", async (c) => {
-  return c.env.ASSETS.fetch(c.req.raw);
-});
+// Serve SPA for all non-API routes
+app.get("*", async (c) => {
+  const path = new URL(c.req.url).pathname;
 
-// Docs endpoint - serve static docs.html
-app.get("/docs", async (c) => {
+  // Serve static assets directly
+  if (path.match(/\.(css|js|png|jpg|jpeg|gif|svg|ico|webmanifest|md|MD)$/)) {
+    return c.env.ASSETS.fetch(c.req.raw);
+  }
+
+  // Serve LICENSE file
+  if (path === "/LICENSE") {
+    return c.env.ASSETS.fetch(c.req.raw);
+  }
+
+  // Serve docs.html for /docs
+  if (path === "/docs") {
+    const url = new URL(c.req.url);
+    url.pathname = "/docs.html";
+    return c.env.ASSETS.fetch(new Request(url.toString(), c.req.raw));
+  }
+
+  // Serve index.html for all other routes (SPA)
   const url = new URL(c.req.url);
-  url.pathname = "/docs.html";
-  return c.env.ASSETS.fetch(new Request(url.toString(), c.req.raw));
+  url.pathname = "/index.html";
+  const response = await c.env.ASSETS.fetch(new Request(url.toString(), c.req.raw));
+
+  // Inject TURNSTILE_SITE_KEY into HTML
+  if (response.ok && response.headers.get("content-type")?.includes("text/html")) {
+    let html = await response.text();
+    html = html.replace(
+      '</head>',
+      `<script>window.TURNSTILE_SITE_KEY = '${c.env.TURNSTILE_SITE_KEY}';</script></head>`
+    );
+    return c.html(html);
+  }
+
+  return response;
 });
 
 export default app;

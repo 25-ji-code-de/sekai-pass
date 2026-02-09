@@ -24,7 +24,6 @@ wrangler.toml.example
 
 # Ignore SQL files
 schema.sql
-migrations/
 
 # Ignore example directory
 examples/

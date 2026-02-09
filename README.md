@@ -1,131 +1,176 @@
 # SEKAI Pass
 
-**25時、Nightcordで。** をテーマにした SSO (Single Sign-On) システム
+现代化的 SSO (Single Sign-On) 单点登录系统
 
-Cloudflare Workers と Lucia Auth を使用した、モダンで安全な認証システムです。
+使用 Cloudflare Workers 和 Lucia Auth 构建的现代化安全认证系统。
 
-## ✨ 特徴
+## ✨ 特性
 
-- 🎨 25時、Nightcord見 風のダークテーマ UI
-- 🔐 Lucia Auth による安全な認証（Scrypt パスワードハッシュ）
-- ⚡ Cloudflare Workers でエッジデプロイ
-- 🗄️ D1 データベースによるデータ永続化
-- 🔄 OAuth 2.0 Authorization Code フロー対応
-- 🎯 Hono フレームワークによる高速ルーティング
-- 🚀 **前後端分離架構** - RESTful API + SPA
-- 📱 **双系统支持** - 标准 OAuth 2.0 + 现代 API
-- 🔒 **PKCE 支持** - 增强公共客户端安全性
+- 🔐 Lucia Auth 安全认证（Scrypt 密码哈希）
+- ⚡ Cloudflare Workers 边缘部署
+- 🗄️ D1 数据库数据持久化
+- 🔄 OAuth 2.1 授权码流程（强制 PKCE）
+- 🎯 Hono 框架高速路由
+- 🚀 **前后端分离架构** - RESTful API + SPA
+- 📱 **双系统支持** - 标准 OAuth 2.1 + 现代 API
+- 🔒 **强制 PKCE** - 增强所有客户端安全性
+- 🆔 **OpenID Connect 1.0** - 完整 OIDC 支持
 
-## 📦 セットアップ
+## 📦 安装配置
 
-### 1. 依存関係のインストール
+### 1. 安装依赖
 
 ```bash
 npm install
 ```
 
-### 2. Cloudflare D1 データベースの作成
+### 2. 创建 Cloudflare D1 数据库
 
 ```bash
-# データベースを作成
+# 创建数据库
 npx wrangler d1 create sekai_pass_db
 ```
 
-出力された `database_id` を `wrangler.toml` の `database_id` フィールドに設定してください。
+将输出的 `database_id` 配置到 `wrangler.toml` 的 `database_id` 字段。
 
-### 3. データベーススキーマの適用
+### 3. 应用数据库架构
 
 ```bash
-# ローカル開発用
+# 本地开发环境
 npx wrangler d1 execute sekai_pass_db --local --file=./schema.sql
 
-# 本番環境用
+# 生产环境
 npx wrangler d1 execute sekai_pass_db --remote --file=./schema.sql
 ```
 
-### 4. ローカル開発
+### 4. 配置 KV 命名空间（OIDC 密钥存储）
+
+```bash
+# 创建 KV 命名空间
+wrangler kv:namespace create "OIDC_KEYS"
+wrangler kv:namespace create "OIDC_KEYS" --preview
+```
+
+将输出的命名空间 ID 更新到 `wrangler.toml`。
+
+### 5. 设置加密密钥
+
+```bash
+# 生成随机密钥
+openssl rand -hex 32
+
+# 设置 secret
+wrangler secret put KEY_ENCRYPTION_SECRET
+# 粘贴上面生成的密钥
+```
+
+### 6. 本地开发
 
 ```bash
 npm run dev
 ```
 
-ブラウザで `http://localhost:8787` を開きます。
+在浏览器中打开 `http://localhost:8787`。
 
-### 5. デプロイ
+### 7. 部署
 
 ```bash
 npm run deploy
 ```
 
-## 🎮 使い方
+## 🎮 使用方法
 
-### ユーザー登録とログイン
+### 用户注册和登录
 
-1. `/register` にアクセスして新規アカウントを作成
-2. `/login` でログイン
-3. ダッシュボードでユーザー情報を確認
+1. 访问 `/register` 创建新账户
+2. 访问 `/login` 登录
+3. 在仪表板查看用户信息
 
-### OAuth クライアントの登録
+### OAuth 客户端注册
 
-アプリケーションを SSO に統合するには、まずクライアントを登録する必要があります。
+要将应用集成到 SSO，首先需要注册客户端。
+
+**注意**: 应用管理 UI 正在开发中，需要通过数据库直接注册。
 
 ```bash
-# ローカル開発環境
+# 本地开发环境
 npx wrangler d1 execute sekai_pass_db --local --command "
 INSERT INTO applications (id, name, client_id, client_secret, redirect_uris, created_at)
 VALUES (
-  'app-001',
+  'app-' || hex(randomblob(8)),
   'My Application',
-  'my-client-id',
-  'my-client-secret',
-  '[\"http://localhost:3000/callback\"]',
+  'client-' || hex(randomblob(12)),
+  'secret-' || hex(randomblob(16)),
+  '[\"http://localhost:3000/callback\",\"http://localhost:8080/callback\"]',
   $(date +%s)000
-);"
+)
+RETURNING client_id, client_secret;"
 
-# 本番環境
+# 生产环境（使用 --remote 替换 --local）
 npx wrangler d1 execute sekai_pass_db --remote --command "..."
 ```
 
-### OAuth 2.0 フロー
+**重要**: 保存输出的 `client_id` 和 `client_secret`。
 
-#### 1. 認証リクエスト
+### OAuth 2.1 流程
 
-ユーザーを以下の URL にリダイレクトします：
+#### 1. 授权请求
+
+将用户重定向到以下 URL（强制 PKCE）：
 
 ```
-GET https://your-domain.workers.dev/oauth/authorize?client_id=CLIENT_ID&redirect_uri=REDIRECT_URI&response_type=code
+GET https://id.nightcord.de5.net/oauth/authorize?client_id=CLIENT_ID&redirect_uri=REDIRECT_URI&response_type=code&code_challenge=CODE_CHALLENGE&code_challenge_method=S256&state=RANDOM_STATE
 ```
 
-#### 2. トークン取得
+**必需参数**:
+- `code_challenge`: PKCE 挑战码（code_verifier 的 SHA256 哈希的 Base64URL 编码）
+- `code_challenge_method`: `S256`（推荐）或 `plain`
+- `state`: 防止 CSRF 的随机字符串（推荐）
 
-認証コードを使ってアクセストークンを取得：
+**注意**: OAuth 2.1 **强制要求** PKCE。缺少 `code_challenge` 参数的请求将被拒绝。
+
+#### 2. 获取令牌
+
+使用授权码交换访问令牌（强制 PKCE）：
 
 ```bash
-curl -X POST https://your-domain.workers.dev/oauth/token \
+curl -X POST https://id.nightcord.de5.net/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code" \
   -d "code=AUTHORIZATION_CODE" \
   -d "client_id=CLIENT_ID" \
-  -d "client_secret=CLIENT_SECRET"
+  -d "code_verifier=CODE_VERIFIER"
 ```
 
-レスポンス：
+**注意**:
+- `code_verifier` 是 PKCE 必需的（OAuth 2.1 合规）
+- `code_verifier` 是授权请求时 `code_challenge` 对应的原始值
+- 公共客户端（SPA、移动应用）不需要 `client_secret`
+
+响应：
 ```json
 {
-  "access_token": "session-token",
+  "access_token": "access-token",
   "token_type": "Bearer",
-  "expires_in": 3600
+  "expires_in": 3600,
+  "refresh_token": "refresh-token",
+  "scope": "profile"
 }
 ```
 
-#### 3. ユーザー情報取得
+**注意**:
+- 访问令牌有效期 1 小时
+- 刷新令牌有效期 30 天
+- 如果包含 `openid` scope，还会返回 `id_token`（OIDC）
+
+#### 3. 获取用户信息
 
 ```bash
-curl https://your-domain.workers.dev/oauth/userinfo \
+curl https://id.nightcord.de5.net/oauth/userinfo \
   -H "Authorization: Bearer ACCESS_TOKEN"
 ```
 
-レスポンス：
+响应：
 ```json
 {
   "id": "user-id",
@@ -135,49 +180,75 @@ curl https://your-domain.workers.dev/oauth/userinfo \
 }
 ```
 
-## 🛣️ API エンドポイント
+#### 4. 刷新访问令牌
 
-### 前端路由（SPA）
+```bash
+curl -X POST https://id.nightcord.de5.net/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=refresh_token" \
+  -d "refresh_token=REFRESH_TOKEN" \
+  -d "client_id=CLIENT_ID"
+```
 
-| パス | 説明 |
-|------|------|
-| `/` | 仪表盘（需要登录） |
-| `/login` | 登录页面 |
-| `/register` | 注册页面 |
-| `/oauth/authorize` | OAuth 授权页面 |
+**注意**: 刷新令牌使用后会自动轮换，旧令牌失效。
 
-### RESTful API（新增）
+#### 5. 撤销令牌
 
-所有 API 端点返回 JSON 格式，HTTP 401 表示 Token 过期。
+```bash
+curl -X POST https://id.nightcord.de5.net/oauth/revoke \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "token=TOKEN_TO_REVOKE" \
+  -d "token_type_hint=refresh_token"
+```
 
-#### 认证 API
+### OpenID Connect (OIDC) 流程
 
-| メソッド | パス | 説明 |
-|---------|------|------|
-| POST | `/api/auth/login` | 用户登录（返回 token） |
-| POST | `/api/auth/register` | 用户注册（返回 token） |
-| GET | `/api/auth/me` | 获取当前用户信息 |
-| POST | `/api/auth/logout` | 用户登出 |
+#### 1. 授权请求（包含 openid scope）
 
-#### OAuth API
+```
+GET https://id.nightcord.de5.net/oauth/authorize?client_id=CLIENT_ID&redirect_uri=REDIRECT_URI&response_type=code&scope=openid%20profile%20email&code_challenge=CODE_CHALLENGE&code_challenge_method=S256&state=RANDOM_STATE&nonce=RANDOM_NONCE
+```
 
-| メソッド | パス | 説明 |
-|---------|------|------|
-| GET | `/api/oauth/app-info` | 获取应用信息 |
-| POST | `/api/oauth/authorize` | OAuth 授权（JSON 版本） |
+**OIDC 特定参数**:
+- `scope`: 必须包含 `openid`
+- `nonce`: 防重放攻击的随机值（推荐）
 
-### 标准 OAuth 2.0（保留兼容）
+#### 2. 获取令牌（包含 ID Token）
 
-| メソッド | パス | 説明 |
-|---------|------|------|
-| GET | `/oauth/authorize` | 认证端点（HTML） |
-| POST | `/oauth/authorize` | 认证承认处理（表单） |
-| POST | `/oauth/token` | トークンエンドポイント |
-| GET | `/oauth/userinfo` | ユーザー情報エンドポイント |
+响应将包含 ID Token：
+```json
+{
+  "access_token": "...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "...",
+  "scope": "openid profile email",
+  "id_token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
 
-## 🗄️ データベーススキーマ
+#### 3. 验证 ID Token
 
-### users テーブル
+ID Token 是一个 JWT，包含用户信息：
+```json
+{
+  "iss": "https://id.nightcord.de5.net",
+  "sub": "user_id",
+  "aud": "client_id",
+  "exp": 1234567890,
+  "iat": 1234567890,
+  "auth_time": 1234567890,
+  "nonce": "random_nonce",
+  "name": "Display Name",
+  "preferred_username": "username",
+  "email": "user@example.com",
+  "email_verified": true
+}
+```
+
+## 🗄️ 数据库架构
+
+### users 表
 ```sql
 CREATE TABLE users (
     id TEXT PRIMARY KEY,
@@ -191,7 +262,7 @@ CREATE TABLE users (
 );
 ```
 
-### sessions テーブル
+### sessions 表
 ```sql
 CREATE TABLE sessions (
     id TEXT PRIMARY KEY,
@@ -201,19 +272,19 @@ CREATE TABLE sessions (
 );
 ```
 
-### applications テーブル
+### applications 表
 ```sql
 CREATE TABLE applications (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     client_id TEXT NOT NULL UNIQUE,
     client_secret TEXT NOT NULL,
-    redirect_uris TEXT NOT NULL,  -- JSON array
+    redirect_uris TEXT NOT NULL,  -- JSON 数组
     created_at INTEGER NOT NULL
 );
 ```
 
-### auth_codes テーブル
+### auth_codes 表
 ```sql
 CREATE TABLE auth_codes (
     code TEXT PRIMARY KEY,
@@ -221,29 +292,121 @@ CREATE TABLE auth_codes (
     client_id TEXT NOT NULL,
     redirect_uri TEXT NOT NULL,
     expires_at INTEGER NOT NULL,
+    code_challenge TEXT,              -- PKCE 挑战码
+    code_challenge_method TEXT DEFAULT 'S256',  -- PKCE 方法
+    state TEXT,                        -- CSRF 防护参数
+    scope TEXT DEFAULT 'profile',      -- 权限范围
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 ```
 
-## 🔒 セキュリティ
+### access_tokens 表
+```sql
+CREATE TABLE access_tokens (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'profile',
+    expires_at INTEGER NOT NULL,      -- 1小时有效
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES applications(client_id) ON DELETE CASCADE
+);
+```
 
-- ✅ パスワードは Scrypt でハッシュ化（Oslo ライブラリ使用）
-- ✅ セッションは Lucia Auth で管理（30日間有効）
-- ✅ HTTPS 必須（本番環境）
-- ✅ セキュアクッキー（SameSite=Lax）
-- ✅ 認証コードは10分間有効
-- ✅ セッション自動更新
+### refresh_tokens 表
+```sql
+CREATE TABLE refresh_tokens (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'profile',
+    expires_at INTEGER NOT NULL,      -- 30天有效
+    created_at INTEGER NOT NULL,
+    last_used_at INTEGER,             -- 最后使用时间
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES applications(client_id) ON DELETE CASCADE
+);
+```
+
+## 🛣️ API 端点
+
+### 前端路由（SPA）
+
+| 路径 | 说明 |
+|------|------|
+| `/` | 仪表板（需要登录） |
+| `/login` | 登录页面 |
+| `/register` | 注册页面 |
+| `/oauth/authorize` | OAuth 授权页面 |
+
+### RESTful API
+
+所有 API 端点返回 JSON 格式，HTTP 401 表示令牌过期。
+
+#### 认证 API
+
+| 方法 | 路径 | 说明 |
+|---------|------|------|
+| POST | `/api/auth/login` | 用户登录（返回 token） |
+| POST | `/api/auth/register` | 用户注册（返回 token） |
+| GET | `/api/auth/me` | 获取当前用户信息 |
+| POST | `/api/auth/logout` | 用户登出 |
+
+#### OAuth API
+
+| 方法 | 路径 | 说明 |
+|---------|------|------|
+| GET | `/api/oauth/app-info` | 获取应用信息 |
+| POST | `/api/oauth/authorize` | OAuth 授权（JSON 版本） |
+
+### 标准 OAuth 2.1
+
+| 方法 | 路径 | 说明 |
+|---------|------|------|
+| GET | `/oauth/authorize` | 授权端点（HTML） |
+| POST | `/oauth/authorize` | 授权确认处理（表单） |
+| POST | `/oauth/token` | 令牌端点 |
+| GET | `/oauth/userinfo` | 用户信息端点 |
+| POST | `/oauth/revoke` | 令牌撤销端点 |
+
+### Discovery 端点
+
+| 方法 | 路径 | 说明 |
+|---------|------|------|
+| GET | `/.well-known/openid-configuration` | OIDC Discovery |
+| GET | `/.well-known/oauth-authorization-server` | OAuth Discovery |
+| GET | `/.well-known/jwks.json` | JWKS 公钥集 |
+
+## 🔒 安全特性
+
+- ✅ 密码使用 Scrypt 哈希（Oslo 库）
+- ✅ 会话由 Lucia Auth 管理（30天有效）
+- ✅ 生产环境强制 HTTPS
+- ✅ 安全 Cookie（SameSite=Lax）
+- ✅ 授权码 10 分钟有效
+- ✅ 会话自动更新
+- ✅ **强制 PKCE** - 所有客户端必须使用
+- ✅ **State 参数** - CSRF 防护
+- ✅ **短期访问令牌** - 1 小时有效期
+- ✅ **令牌轮换** - 刷新令牌使用后自动轮换
+- ✅ **Scope 验证** - 细粒度权限控制
+- ✅ **ID Token 签名** - ES256 (ECDSA P-256)
 
 ## 📚 文档
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - 架构详细说明
-- **[API_EXAMPLES.md](./API_EXAMPLES.md)** - API 使用示例和测试方法
-- **[MIGRATION.md](./MIGRATION.md)** - 前后端分离改造说明
-- **[PKCE.md](./PKCE.md)** - PKCE 流程说明
+详细文档请查看 [docs](./docs/) 目录：
 
-## 🎨 カスタマイズ
+- **[文档中心](./docs/README.md)** - 完整文档索引
+- **[OIDC 功能](./docs/features/oidc/README.md)** - OpenID Connect 实现
+- **[OAuth 2.1 功能](./docs/features/oauth/README.md)** - OAuth 2.1 实现
+- **[API 示例](./docs/api/examples.md)** - API 使用示例
+- **[Discovery 端点](./docs/api/discovery.md)** - OAuth/OIDC Discovery 文档
+- **[示例代码](./examples/README.md)** - 集成示例代码
 
-### UI のカスタマイズ
+## 🎨 自定义
+
+### UI 自定义
 
 前端样式文件位于 `public/css/styles.css`，可以直接编辑：
 
@@ -255,47 +418,48 @@ CREATE TABLE auth_codes (
 }
 ```
 
-### 認証フローのカスタマイズ
+### 认证流程自定义
 
 - **API 路由**: 编辑 `src/lib/api.ts`
 - **OAuth 路由**: 编辑 `src/index.ts`
 - **前端页面**: 编辑 `public/js/pages/*.js`
 
-## 📝 開発メモ
+## 📝 开发备注
 
-### ローカルでのテスト
+### 本地测试
 
 ```bash
-# 開発サーバー起動
+# 启动开发服务器
 npm run dev
 
-# 別のターミナルで D1 データベースを確認
+# 在另一个终端查看 D1 数据库
 npx wrangler d1 execute sekai_pass_db --local --command "SELECT * FROM users"
 ```
 
-### デバッグ
+### 调试
 
-Cloudflare Workers のログは `wrangler tail` で確認できます：
+Cloudflare Workers 日志可以通过 `wrangler tail` 查看：
 
 ```bash
 npx wrangler tail
 ```
 
-## 🚀 本番環境へのデプロイ
+## 🚀 生产环境部署
 
-1. `wrangler.toml` の設定を確認
-2. データベースを本番環境に作成
-3. スキーマを適用
-4. デプロイ
+1. 确认 `wrangler.toml` 配置
+2. 在生产环境创建数据库
+3. 应用架构
+4. 设置加密密钥
+5. 部署
 
 ```bash
 npm run deploy
 ```
 
-## 📄 ライセンス
+## 📄 许可证
 
 MIT
 
-## 🤝 貢献
+## 🤝 贡献
 
-プルリクエストを歓迎します！
+欢迎提交 Pull Request！

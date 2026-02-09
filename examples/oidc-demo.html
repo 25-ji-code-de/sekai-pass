@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEKAI Pass - OpenID Connect 演示</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', 'Noto Sans SC', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 800px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #10b981;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge.oidc {
+      background: #3b82f6;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      line-height: 1.6;
+    }
+
+    .section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #f9fafb;
+      border-radius: 8px;
+      border-left: 4px solid #3b82f6;
+    }
+
+    .section h2 {
+      color: #333;
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 12px;
+      font-size: 14px;
+    }
+
+    .info-label {
+      color: #666;
+      font-weight: 600;
+    }
+
+    .info-value {
+      color: #333;
+      word-break: break-all;
+      font-family: 'Monaco', 'Courier New', monospace;
+      background: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      margin-top: 10px;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .token-display {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .claims-display {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .claim-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #f3f4f6;
+    }
+
+    .claim-item:last-child {
+      border-bottom: none;
+    }
+
+    .claim-key {
+      font-weight: 600;
+      color: #3b82f6;
+      font-family: 'Monaco', 'Courier New', monospace;
+    }
+
+    .claim-value {
+      color: #333;
+      font-family: 'Monaco', 'Courier New', monospace;
+      text-align: right;
+    }
+
+    .status {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+    .status.success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #10b981;
+    }
+
+    .status.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #ef4444;
+    }
+
+    .status.info {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #3b82f6;
+    }
+
+    .feature-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .feature-list li {
+      padding: 8px 0;
+      padding-left: 24px;
+      position: relative;
+    }
+
+    .feature-list li:before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #10b981;
+      font-weight: bold;
+    }
+
+    .button-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .btn-secondary {
+      background: #6b7280;
+    }
+
+    .btn-secondary:hover {
+      box-shadow: 0 10px 30px rgba(107, 114, 128, 0.4);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>
+      🔐 SEKAI Pass
+      <span class="badge oidc">OpenID Connect</span>
+    </h1>
+    <p class="subtitle">
+      OpenID Connect (OIDC) 集成演示 - 使用 ID Token 进行身份验证
+    </p>
+
+    <div class="section">
+      <h2>📋 OIDC 功能特性</h2>
+      <ul class="feature-list">
+        <li>标准化的身份验证层（基于 OAuth 2.1）</li>
+        <li>签名的 JWT ID Token（ES256 算法）</li>
+        <li>支持 nonce 防重放攻击</li>
+        <li>基于 scope 的声明映射</li>
+        <li>完全向后兼容 OAuth 2.1</li>
+      </ul>
+    </div>
+
+    <div id="status"></div>
+
+    <div id="loginSection">
+      <div class="section">
+        <h2>🚀 配置信息</h2>
+        <div class="info-grid">
+          <div class="info-label">授权服务器:</div>
+          <div class="info-value" id="issuer">https://id.nightcord.de5.net</div>
+
+          <div class="info-label">Client ID:</div>
+          <div class="info-value" id="clientId">demo-client</div>
+
+          <div class="info-label">Redirect URI:</div>
+          <div class="info-value" id="redirectUri">-</div>
+
+          <div class="info-label">Scope:</div>
+          <div class="info-value">openid profile email</div>
+
+          <div class="info-label">Response Type:</div>
+          <div class="info-value">code</div>
+
+          <div class="info-label">PKCE:</div>
+          <div class="info-value">S256 (强制)</div>
+        </div>
+      </div>
+
+      <button onclick="startOIDCLogin()">🔑 使用 OIDC 登录</button>
+      <div class="button-group">
+        <button class="btn-secondary" onclick="testDiscovery()">📋 测试 Discovery</button>
+        <button class="btn-secondary" onclick="testJWKS()">🔐 测试 JWKS</button>
+      </div>
+    </div>
+
+    <div id="tokenSection" style="display: none;">
+      <div class="section">
+        <h2>🎫 ID Token (JWT)</h2>
+        <div class="token-display" id="idTokenDisplay"></div>
+      </div>
+
+      <div class="section">
+        <h2>📝 ID Token Claims</h2>
+        <div class="claims-display" id="claimsDisplay"></div>
+      </div>
+
+      <div class="section">
+        <h2>🔑 Access Token</h2>
+        <div class="token-display" id="accessTokenDisplay"></div>
+      </div>
+
+      <div class="button-group">
+        <button onclick="testUserInfo()">👤 获取用户信息</button>
+        <button class="btn-secondary" onclick="logout()">🚪 退出登录</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CONFIG = {
+      issuer: 'https://id.nightcord.de5.net',
+      clientId: 'demo-client',
+      redirectUri: window.location.href.split('?')[0],
+      scope: 'openid profile email',
+      responseType: 'code'
+    };
+
+    // 更新页面显示的配置
+    document.getElementById('redirectUri').textContent = CONFIG.redirectUri;
+
+    // 生成随机字符串
+    function generateRandomString(length) {
+      const array = new Uint8Array(length);
+      crypto.getRandomValues(array);
+      return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Base64URL 编码
+    function base64URLEncode(buffer) {
+      return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    }
+
+    // 生成 PKCE code_verifier 和 code_challenge
+    async function generatePKCE() {
+      const verifier = generateRandomString(32);
+      const encoder = new TextEncoder();
+      const data = encoder.encode(verifier);
+      const hash = await crypto.subtle.digest('SHA-256', data);
+      const challenge = base64URLEncode(hash);
+      return { verifier, challenge };
+    }
+
+    // 显示状态消息
+    function showStatus(message, type = 'info') {
+      const statusDiv = document.getElementById('status');
+      statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+    }
+
+    // 开始 OIDC 登录流程
+    async function startOIDCLogin() {
+      try {
+        showStatus('🔄 正在生成 PKCE 参数...', 'info');
+
+        const { verifier, challenge } = await generatePKCE();
+        const state = generateRandomString(16);
+        const nonce = generateRandomString(16);
+
+        // 保存到 sessionStorage
+        sessionStorage.setItem('pkce_verifier', verifier);
+        sessionStorage.setItem('oauth_state', state);
+        sessionStorage.setItem('oidc_nonce', nonce);
+
+        // 构建授权 URL
+        const params = new URLSearchParams({
+          client_id: CONFIG.clientId,
+          redirect_uri: CONFIG.redirectUri,
+          response_type: CONFIG.responseType,
+          scope: CONFIG.scope,
+          state: state,
+          nonce: nonce,
+          code_challenge: challenge,
+          code_challenge_method: 'S256'
+        });
+
+        const authUrl = `${CONFIG.issuer}/oauth/authorize?${params.toString()}`;
+
+        showStatus('✅ 正在跳转到授权页面...', 'success');
+
+        // 跳转到授权页面
+        setTimeout(() => {
+          window.location.href = authUrl;
+        }, 500);
+      } catch (error) {
+        showStatus(`❌ 错误: ${error.message}`, 'error');
+      }
+    }
+
+    // 处理回调
+    async function handleCallback() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const state = params.get('state');
+      const error = params.get('error');
+
+      if (error) {
+        showStatus(`❌ 授权失败: ${error}`, 'error');
+        return;
+      }
+
+      if (!code) {
+        return; // 不是回调页面
+      }
+
+      showStatus('🔄 正在交换授权码...', 'info');
+
+      // 验证 state
+      const savedState = sessionStorage.getItem('oauth_state');
+      if (state !== savedState) {
+        showStatus('❌ State 验证失败！可能存在 CSRF 攻击', 'error');
+        return;
+      }
+
+      // 获取 code_verifier
+      const verifier = sessionStorage.getItem('pkce_verifier');
+      if (!verifier) {
+        showStatus('❌ 未找到 PKCE verifier', 'error');
+        return;
+      }
+
+      try {
+        // 交换授权码获取 token
+        const tokenResponse = await fetch(`${CONFIG.issuer}/oauth/token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code: code,
+            client_id: CONFIG.clientId,
+            code_verifier: verifier
+          })
+        });
+
+        if (!tokenResponse.ok) {
+          const errorData = await tokenResponse.json();
+          throw new Error(errorData.error_description || errorData.error);
+        }
+
+        const tokens = await tokenResponse.json();
+
+        // 保存 tokens
+        sessionStorage.setItem('access_token', tokens.access_token);
+        sessionStorage.setItem('refresh_token', tokens.refresh_token);
+        if (tokens.id_token) {
+          sessionStorage.setItem('id_token', tokens.id_token);
+        }
+
+        // 清理 URL
+        window.history.replaceState({}, document.title, CONFIG.redirectUri);
+
+        // 显示 token 信息
+        displayTokens(tokens);
+
+        showStatus('✅ 登录成功！已获取 ID Token', 'success');
+      } catch (error) {
+        showStatus(`❌ Token 交换失败: ${error.message}`, 'error');
+      }
+    }
+
+    // 解码 JWT
+    function decodeJWT(token) {
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        throw new Error('Invalid JWT format');
+      }
+
+      const payload = parts[1];
+      const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+      return JSON.parse(decoded);
+    }
+
+    // 显示 tokens
+    function displayTokens(tokens) {
+      document.getElementById('loginSection').style.display = 'none';
+      document.getElementById('tokenSection').style.display = 'block';
+
+      // 显示 ID Token
+      if (tokens.id_token) {
+        document.getElementById('idTokenDisplay').textContent = tokens.id_token;
+
+        // 解码并显示 claims
+        try {
+          const claims = decodeJWT(tokens.id_token);
+          const claimsHtml = Object.entries(claims).map(([key, value]) => {
+            let displayValue = value;
+            if (typeof value === 'number' && (key === 'exp' || key === 'iat' || key === 'auth_time')) {
+              displayValue = `${value} (${new Date(value * 1000).toLocaleString('zh-CN')})`;
+            } else if (typeof value === 'object') {
+              displayValue = JSON.stringify(value);
+            }
+            return `
+              <div class="claim-item">
+                <span class="claim-key">${key}</span>
+                <span class="claim-value">${displayValue}</span>
+              </div>
+            `;
+          }).join('');
+          document.getElementById('claimsDisplay').innerHTML = claimsHtml;
+        } catch (error) {
+          document.getElementById('claimsDisplay').textContent = 'Failed to decode claims';
+        }
+      }
+
+      // 显示 Access Token
+      document.getElementById('accessTokenDisplay').textContent = tokens.access_token;
+    }
+
+    // 测试 UserInfo 端点
+    async function testUserInfo() {
+      const accessToken = sessionStorage.getItem('access_token');
+      if (!accessToken) {
+        showStatus('❌ 未找到 access token', 'error');
+        return;
+      }
+
+      try {
+        showStatus('🔄 正在获取用户信息...', 'info');
+
+        const response = await fetch(`${CONFIG.issuer}/oauth/userinfo`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch user info');
+        }
+
+        const userInfo = await response.json();
+        showStatus(`✅ 用户信息: ${JSON.stringify(userInfo, null, 2)}`, 'success');
+      } catch (error) {
+        showStatus(`❌ 获取用户信息失败: ${error.message}`, 'error');
+      }
+    }
+
+    // 测试 Discovery 端点
+    async function testDiscovery() {
+      try {
+        showStatus('🔄 正在获取 OIDC Discovery 元数据...', 'info');
+
+        const response = await fetch(`${CONFIG.issuer}/.well-known/openid-configuration`);
+        const metadata = await response.json();
+
+        showStatus(`✅ Discovery 成功！支持的算法: ${metadata.id_token_signing_alg_values_supported.join(', ')}`, 'success');
+        console.log('OIDC Metadata:', metadata);
+      } catch (error) {
+        showStatus(`❌ Discovery 失败: ${error.message}`, 'error');
+      }
+    }
+
+    // 测试 JWKS 端点
+    async function testJWKS() {
+      try {
+        showStatus('🔄 正在获取 JWKS...', 'info');
+
+        const response = await fetch(`${CONFIG.issuer}/.well-known/jwks.json`);
+        const jwks = await response.json();
+
+        const keyCount = jwks.keys.length;
+        if (keyCount === 0) {
+          showStatus('⚠️ JWKS 为空（密钥将在首次 OIDC 请求时生成）', 'info');
+        } else {
+          showStatus(`✅ JWKS 成功！找到 ${keyCount} 个密钥`, 'success');
+        }
+        console.log('JWKS:', jwks);
+      } catch (error) {
+        showStatus(`❌ JWKS 失败: ${error.message}`, 'error');
+      }
+    }
+
+    // 退出登录
+    function logout() {
+      sessionStorage.clear();
+      window.location.reload();
+    }
+
+    // 页面加载时检查是否有回调参数
+    window.addEventListener('DOMContentLoaded', () => {
+      handleCallback();
+
+      // 如果已经有 token，显示 token 信息
+      const idToken = sessionStorage.getItem('id_token');
+      const accessToken = sessionStorage.getItem('access_token');
+      if (idToken && accessToken) {
+        displayTokens({
+          id_token: idToken,
+          access_token: accessToken
+        });
+      }
+    });
+  </script>
+</body>
+</html>

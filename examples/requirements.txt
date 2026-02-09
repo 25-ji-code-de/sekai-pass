@@ -1,0 +1,5 @@
+# SEKAI Pass OIDC Python 客户端依赖
+
+Flask>=3.0.0
+Authlib>=1.3.0
+requests>=2.31.0

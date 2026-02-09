@@ -168,6 +168,7 @@
         <p>• 防止授权码拦截攻击</p>
         <p>• 适合纯前端应用</p>
         <p>• OAuth 2.1 官方推荐</p>
+        <p>• 使用 OpenID Connect 标准格式</p>
       </div>
     </div>
 
@@ -304,15 +305,23 @@
 
         const user = await userResponse.json();
 
+        // 适配新的 OIDC 格式
+        const adaptedUser = {
+          id: user.sub,
+          username: user.preferred_username || user.sub,
+          email: user.email || '未提供',
+          display_name: user.name || user.preferred_username || '未设置'
+        };
+
         // 保存到本地存储
-        localStorage.setItem('sekai_user', JSON.stringify(user));
+        localStorage.setItem('sekai_user', JSON.stringify(adaptedUser));
         localStorage.setItem('sekai_token', access_token);
 
         // 清理 URL
         window.history.replaceState({}, document.title, window.location.pathname);
 
         // 显示用户信息
-        showUser(user);
+        showUser(adaptedUser);
 
       } catch (error) {
         console.error('Authentication error:', error);

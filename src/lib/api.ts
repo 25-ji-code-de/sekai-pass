@@ -34,7 +34,7 @@ apiRouter.get("/oauth/config", async (c) => {
     token_endpoint: `${baseUrl}/oauth/token`,
     userinfo_endpoint: `${baseUrl}/oauth/userinfo`,
     pkce_supported: true,
-    code_challenge_methods: ["S256", "plain"]
+    code_challenge_methods: ["S256"]
   });
 });
 
@@ -287,16 +287,27 @@ apiRouter.post("/oauth/authorize", async (c) => {
       return c.json({ error: "code_challenge is required (PKCE mandatory)" }, 400);
     }
 
+    // OAuth 2.1: Only S256 method is allowed
+    const method = code_challenge_method || 'S256';
+    if (method !== 'S256') {
+      return c.json({ error: "Only S256 code_challenge_method is supported" }, 400);
+    }
+
     const code = generateId(32);
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const createdAt = Date.now();
 
     await c.env.DB.prepare(
-      "INSERT INTO auth_codes (code, user_id, client_id, redirect_uri, expires_at, code_challenge, code_challenge_method, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(code, user.id, client_id, redirect_uri, expiresAt, code_challenge, code_challenge_method || 'S256', state || null).run();
+      "INSERT INTO auth_codes (code, user_id, client_id, redirect_uri, expires_at, created_at, code_challenge, code_challenge_method, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(code, user.id, client_id, redirect_uri, expiresAt, createdAt, code_challenge, method, state || null).run();
+
+    // OAuth 2.1: Include issuer parameter to prevent mix-up attacks
+    const issuer = new URL(c.req.url).origin;
 
     return c.json({
       success: true,
       code,
+      iss: issuer,
       state: state || undefined
     });
   } catch (error) {

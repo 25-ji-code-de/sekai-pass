@@ -5,12 +5,13 @@ import { initializeLucia } from "./lib/auth";
 import { generateId } from "./lib/password";
 import { verifyPKCE, validateCodeChallenge, validateCodeVerifier } from "./lib/pkce";
 import { verifyTurnstile } from "./lib/turnstile";
-import { issueTokens, validateAccessToken, refreshAccessToken, revokeRefreshToken } from "./lib/tokens";
+import { issueTokens, validateAccessToken, refreshAccessToken, revokeRefreshToken, revokeAllUserTokens } from "./lib/tokens";
 import { validateScopeParameter, formatScopes, filterUserData, SCOPES, hasScopes } from "./lib/scope";
 import { isOIDCRequest } from "./lib/oidc-scope";
 import { generateIDToken } from "./lib/id-token";
 import { generateOIDCMetadata } from "./lib/oidc-discovery";
 import { getPublicKeys, checkAndRotateKeys } from "./lib/keys";
+import { authenticateClient } from "./lib/client-auth";
 import * as html from "./lib/html";
 import { apiRouter } from "./lib/api";
 
@@ -29,6 +30,42 @@ type Variables = {
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// ============================================
+// Security Helper Functions
+// ============================================
+
+/**
+ * Check if URL is a loopback address (localhost)
+ * OAuth 2.1 allows HTTP for loopback interfaces only
+ */
+function isLoopback(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname === 'localhost' ||
+           hostname === '127.0.0.1' ||
+           hostname === '[::1]' ||
+           hostname.startsWith('127.') ||
+           hostname.startsWith('[::ffff:127.');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Enforce HTTPS for OAuth endpoints (except loopback)
+ * OAuth 2.1 requirement: All OAuth protocol URLs MUST use HTTPS
+ */
+function enforceHTTPS(c: any): Response | null {
+  const requestUrl = new URL(c.req.url);
+  if (requestUrl.protocol === 'http:' && !isLoopback(c.req.url)) {
+    return c.json({
+      error: "invalid_request",
+      error_description: "HTTPS is required for OAuth endpoints"
+    }, 400);
+  }
+  return null;
+}
 
 // CORS middleware for API and OAuth endpoints
 app.use("/api/*", cors({
@@ -106,8 +143,9 @@ app.get("/.well-known/oauth-authorization-server", async (c) => {
     revocation_endpoint: `${baseUrl}/oauth/revoke`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
-    code_challenge_methods_supported: ["S256", "plain"],
-    token_endpoint_auth_methods_supported: ["none"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
+    token_endpoint_auth_signing_alg_values_supported: ["ES256", "RS256"],
     revocation_endpoint_auth_methods_supported: ["none"],
     scopes_supported: Object.values(SCOPES),
     service_documentation: `${baseUrl}/docs`,
@@ -136,6 +174,10 @@ app.get("/.well-known/jwks.json", async (c) => {
 
 // OAuth authorization endpoint (traditional flow with HTML)
 app.get("/oauth/authorize", async (c) => {
+  // OAuth 2.1: Enforce HTTPS (except for loopback)
+  const httpsError = enforceHTTPS(c);
+  if (httpsError) return httpsError;
+
   const user = c.get("user");
 
   if (!user) {
@@ -159,6 +201,11 @@ app.get("/oauth/authorize", async (c) => {
   // OAuth 2.1: PKCE is mandatory for all clients
   if (!codeChallenge) {
     return c.text("code_challenge is required (PKCE mandatory)", 400);
+  }
+
+  // OAuth 2.1: Only S256 method is allowed
+  if (codeChallengeMethod !== "S256") {
+    return c.text("Only S256 code_challenge_method is supported", 400);
   }
 
   if (!validateCodeChallenge(codeChallenge, codeChallengeMethod)) {
@@ -202,6 +249,10 @@ app.get("/oauth/authorize", async (c) => {
 
 // OAuth authorization handler (traditional flow)
 app.post("/oauth/authorize", async (c) => {
+  // OAuth 2.1: Enforce HTTPS (except for loopback)
+  const httpsError = enforceHTTPS(c);
+  if (httpsError) return httpsError;
+
   const user = c.get("user");
 
   if (!user) {
@@ -241,11 +292,12 @@ app.post("/oauth/authorize", async (c) => {
 
     const code = generateId(32);
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const createdAt = Date.now();
     const authTime = Date.now();
 
     await c.env.DB.prepare(
-      "INSERT INTO auth_codes (code, user_id, client_id, redirect_uri, expires_at, code_challenge, code_challenge_method, state, scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(code, user.id, clientId, redirectUri, expiresAt, codeChallenge, codeChallengeMethod, state, scope).run();
+      "INSERT INTO auth_codes (code, user_id, client_id, redirect_uri, expires_at, created_at, code_challenge, code_challenge_method, state, scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(code, user.id, clientId, redirectUri, expiresAt, createdAt, codeChallenge, codeChallengeMethod, state, scope).run();
 
     // Store OIDC auth data if this is an OIDC request
     if (isOIDCRequest(scope)) {
@@ -265,6 +317,8 @@ app.post("/oauth/authorize", async (c) => {
 
     const successUrl = new URL(redirectUri);
     successUrl.searchParams.set("code", code);
+    // OAuth 2.1: Include issuer parameter to prevent mix-up attacks
+    successUrl.searchParams.set("iss", new URL(c.req.url).origin);
     if (state) {
       successUrl.searchParams.set("state", state);
     }
@@ -277,15 +331,30 @@ app.post("/oauth/authorize", async (c) => {
 
 // OAuth token endpoint (OAuth 2.1 with refresh tokens)
 app.post("/oauth/token", async (c) => {
+  // OAuth 2.1: Enforce HTTPS (except for loopback)
+  const httpsError = enforceHTTPS(c);
+  if (httpsError) return httpsError;
+
   const formData = await c.req.formData();
   const grantType = formData.get("grant_type")?.toString();
-  const clientId = formData.get("client_id")?.toString();
 
-  if (!clientId) {
-    return c.json({ error: "invalid_request", error_description: "client_id is required" }, 400);
+  // Authenticate client (supports both public and confidential clients)
+  const tokenEndpointUrl = new URL(c.req.url).origin + "/oauth/token";
+  const authResult = await authenticateClient(c.env.DB, formData, tokenEndpointUrl);
+
+  if (!authResult.authenticated) {
+    return c.json(
+      {
+        error: authResult.error || "invalid_client",
+        error_description: authResult.errorDescription
+      },
+      401
+    );
   }
 
-  // Verify client exists
+  const clientId = authResult.clientId!;
+
+  // Get full application record
   const app = await c.env.DB.prepare(
     "SELECT * FROM applications WHERE client_id = ?"
   ).bind(clientId).first();
@@ -341,6 +410,38 @@ app.post("/oauth/token", async (c) => {
       return c.json({
         error: "invalid_grant",
         error_description: "code_verifier does not match code_challenge"
+      }, 400);
+    }
+
+    // OAuth 2.1: Check for authorization code reuse
+    // If tokens were already issued for this auth code, revoke them and reject the request
+    const authCodeCreatedAt = authCode.created_at as number || (authCode.expires_at as number) - 10 * 60 * 1000;
+    const recentTokens = await c.env.DB.prepare(
+      `SELECT token FROM access_tokens
+       WHERE client_id = ? AND user_id = ?
+       AND created_at >= ? AND created_at <= ?`
+    ).bind(
+      clientId,
+      authCode.user_id,
+      authCodeCreatedAt - 1000, // 1 second before code creation
+      Date.now()
+    ).all();
+
+    if (recentTokens.results && recentTokens.results.length > 0) {
+      // Authorization code reuse detected - revoke all tokens for this client
+      await revokeAllUserTokens(c.env.DB, authCode.user_id as string, clientId);
+
+      // Log security event
+      console.error("SECURITY: Authorization code reuse detected", {
+        clientId,
+        userId: authCode.user_id,
+        code: code.substring(0, 8) + "...",
+        tokensRevoked: recentTokens.results.length
+      });
+
+      return c.json({
+        error: "invalid_grant",
+        error_description: "Authorization code has already been used"
       }, 400);
     }
 

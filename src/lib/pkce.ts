@@ -2,28 +2,25 @@
 
 /**
  * Verify PKCE code_verifier against code_challenge
+ * OAuth 2.1: Only S256 method is supported
  */
 export async function verifyPKCE(
   codeVerifier: string,
   codeChallenge: string,
   method: string = 'S256'
 ): Promise<boolean> {
-  if (method === 'plain') {
-    // Plain method: verifier must equal challenge
-    return codeVerifier === codeChallenge;
+  // OAuth 2.1: Only S256 method is allowed
+  if (method !== 'S256') {
+    return false;
   }
 
-  if (method === 'S256') {
-    // S256 method: SHA256(verifier) must equal challenge
-    const encoder = new TextEncoder();
-    const data = encoder.encode(codeVerifier);
-    const hash = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hash));
-    const computedChallenge = base64URLEncode(hashArray);
-    return computedChallenge === codeChallenge;
-  }
-
-  return false;
+  // S256 method: SHA256(verifier) must equal challenge
+  const encoder = new TextEncoder();
+  const data = encoder.encode(codeVerifier);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hash));
+  const computedChallenge = base64URLEncode(hashArray);
+  return computedChallenge === codeChallenge;
 }
 
 /**
@@ -40,6 +37,7 @@ function base64URLEncode(buffer: number[] | Uint8Array): string {
 
 /**
  * Validate code_challenge format
+ * OAuth 2.1: Only S256 method is supported
  */
 export function validateCodeChallenge(
   codeChallenge: string | null,
@@ -59,8 +57,8 @@ export function validateCodeChallenge(
     return false;
   }
 
-  // Check method
-  if (method && method !== 'S256' && method !== 'plain') {
+  // OAuth 2.1: Only S256 method is allowed
+  if (method && method !== 'S256') {
     return false;
   }
 

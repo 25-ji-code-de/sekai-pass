@@ -14,6 +14,7 @@ export interface OIDCMetadata {
   grant_types_supported: string[];
   subject_types_supported: string[];
   id_token_signing_alg_values_supported: string[];
+  token_endpoint_auth_signing_alg_values_supported: string[];
   scopes_supported: string[];
   token_endpoint_auth_methods_supported: string[];
   claims_supported: string[];
@@ -44,13 +45,14 @@ export function generateOIDCMetadata(baseUrl: string): OIDCMetadata {
     subject_types_supported: ["public"],
 
     // Signing algorithms
-    id_token_signing_alg_values_supported: ["ES256"],
+    id_token_signing_alg_values_supported: ["ES256", "RS256"],
+    token_endpoint_auth_signing_alg_values_supported: ["ES256", "RS256"],
 
     // Scopes
     scopes_supported: ["openid", ...Object.values(SCOPES)],
 
     // Authentication methods
-    token_endpoint_auth_methods_supported: ["none"],
+    token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
 
     // Claims
     claims_supported: [
@@ -69,8 +71,8 @@ export function generateOIDCMetadata(baseUrl: string): OIDCMetadata {
       "amr"
     ],
 
-    // PKCE
-    code_challenge_methods_supported: ["S256", "plain"],
+    // PKCE - OAuth 2.1: Only S256 method is supported
+    code_challenge_methods_supported: ["S256"],
 
     // Optional metadata
     service_documentation: `${baseUrl}/docs`,

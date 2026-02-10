@@ -1,5 +1,7 @@
 // JWT Implementation using Web Crypto API
-// Supports ES256 (ECDSA with P-256 and SHA-256)
+// Supports ES256 (ECDSA with P-256 and SHA-256) and RS256 (RSA with SHA-256)
+
+export type JWTAlgorithm = "ES256" | "RS256";
 
 /**
  * Base64URL encode (RFC 4648)
@@ -35,28 +37,54 @@ export function base64URLDecode(str: string): ArrayBuffer {
 }
 
 /**
- * Sign JWT using ES256
+ * Sign JWT using ES256 or RS256
  */
 export async function signJWT(
   payload: Record<string, any>,
   privateKeyJWK: JsonWebKey,
-  kid: string
+  kid: string,
+  algorithm: JWTAlgorithm = "ES256"
 ): Promise<string> {
-  // Import private key
-  const privateKey = await crypto.subtle.importKey(
-    "jwk",
-    privateKeyJWK,
-    {
+  // Import private key based on algorithm
+  let privateKey: CryptoKey;
+  let signAlgorithm: any;
+
+  if (algorithm === "ES256") {
+    privateKey = await crypto.subtle.importKey(
+      "jwk",
+      privateKeyJWK,
+      {
+        name: "ECDSA",
+        namedCurve: "P-256"
+      },
+      false,
+      ["sign"]
+    );
+    signAlgorithm = {
       name: "ECDSA",
-      namedCurve: "P-256"
-    },
-    false,
-    ["sign"]
-  );
+      hash: { name: "SHA-256" }
+    };
+  } else if (algorithm === "RS256") {
+    privateKey = await crypto.subtle.importKey(
+      "jwk",
+      privateKeyJWK,
+      {
+        name: "RSASSA-PKCS1-v1_5",
+        hash: "SHA-256"
+      },
+      false,
+      ["sign"]
+    );
+    signAlgorithm = {
+      name: "RSASSA-PKCS1-v1_5"
+    };
+  } else {
+    throw new Error(`Unsupported algorithm: ${algorithm}`);
+  }
 
   // Create header
   const header = {
-    alg: "ES256",
+    alg: algorithm,
     typ: "JWT",
     kid: kid
   };
@@ -75,10 +103,7 @@ export async function signJWT(
 
   // Sign
   const signature = await crypto.subtle.sign(
-    {
-      name: "ECDSA",
-      hash: { name: "SHA-256" }
-    },
+    signAlgorithm,
     privateKey,
     signingInputBuffer
   );
@@ -90,11 +115,13 @@ export async function signJWT(
 }
 
 /**
- * Verify JWT signature using ES256
+ * Verify JWT signature using ES256 or RS256
+ * If algorithm is not provided, it will be auto-detected from JWT header
  */
 export async function verifyJWT(
   token: string,
-  publicKeyJWK: JsonWebKey
+  publicKeyJWK: JsonWebKey,
+  algorithm?: JWTAlgorithm
 ): Promise<boolean> {
   try {
     const parts = token.split('.');
@@ -104,17 +131,51 @@ export async function verifyJWT(
 
     const [encodedHeader, encodedPayload, encodedSignature] = parts;
 
-    // Import public key
-    const publicKey = await crypto.subtle.importKey(
-      "jwk",
-      publicKeyJWK,
-      {
+    // Auto-detect algorithm from header if not provided
+    if (!algorithm) {
+      const header = JSON.parse(
+        new TextDecoder().decode(base64URLDecode(encodedHeader))
+      );
+      algorithm = header.alg as JWTAlgorithm;
+    }
+
+    // Import public key based on algorithm
+    let publicKey: CryptoKey;
+    let verifyAlgorithm: any;
+
+    if (algorithm === "ES256") {
+      publicKey = await crypto.subtle.importKey(
+        "jwk",
+        publicKeyJWK,
+        {
+          name: "ECDSA",
+          namedCurve: "P-256"
+        },
+        false,
+        ["verify"]
+      );
+      verifyAlgorithm = {
         name: "ECDSA",
-        namedCurve: "P-256"
-      },
-      false,
-      ["verify"]
-    );
+        hash: { name: "SHA-256" }
+      };
+    } else if (algorithm === "RS256") {
+      publicKey = await crypto.subtle.importKey(
+        "jwk",
+        publicKeyJWK,
+        {
+          name: "RSASSA-PKCS1-v1_5",
+          hash: "SHA-256"
+        },
+        false,
+        ["verify"]
+      );
+      verifyAlgorithm = {
+        name: "RSASSA-PKCS1-v1_5"
+      };
+    } else {
+      console.error(`Unsupported algorithm: ${algorithm}`);
+      return false;
+    }
 
     // Decode signature
     const signature = base64URLDecode(encodedSignature);
@@ -125,10 +186,7 @@ export async function verifyJWT(
 
     // Verify signature
     return await crypto.subtle.verify(
-      {
-        name: "ECDSA",
-        hash: { name: "SHA-256" }
-      },
+      verifyAlgorithm,
       publicKey,
       signature,
       signingInputBuffer

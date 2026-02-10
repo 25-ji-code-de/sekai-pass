@@ -1,7 +1,7 @@
 {
   "name": "sekai-pass",
   "version": "1.0.0",
-  "description": "SEKAI Pass - SSO inspired by 25-ji, Nightcord de.",
+  "description": "SEKAI Pass - Modern SSO Single Sign-On System",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",

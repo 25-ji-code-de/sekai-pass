@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS auth_codes (
     client_id TEXT NOT NULL,
     redirect_uri TEXT NOT NULL,
     expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
     code_challenge TEXT,
     code_challenge_method TEXT DEFAULT 'S256',
     state TEXT,
@@ -84,3 +85,25 @@ CREATE INDEX IF NOT EXISTS idx_access_tokens_user_id ON access_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_access_tokens_expires_at ON access_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
+
+-- Signing keys for OIDC ID tokens
+-- Used to sign and verify ID tokens (JWT)
+CREATE TABLE IF NOT EXISTS signing_keys (
+    kid TEXT PRIMARY KEY,
+    public_key_jwk TEXT NOT NULL,
+    private_key_jwk TEXT NOT NULL,  -- Encrypted with AES-256-GCM
+    algorithm TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    revoked_at INTEGER,
+    status TEXT NOT NULL DEFAULT 'active'
+);
+
+-- OIDC authentication data
+-- Stores nonce and auth_time for OIDC flows
+CREATE TABLE IF NOT EXISTS oidc_auth_data (
+    code TEXT PRIMARY KEY,
+    nonce TEXT,
+    auth_time INTEGER NOT NULL,
+    FOREIGN KEY (code) REFERENCES auth_codes(code) ON DELETE CASCADE
+);

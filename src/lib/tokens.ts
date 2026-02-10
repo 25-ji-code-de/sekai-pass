@@ -209,7 +209,8 @@ export async function cleanupExpiredTokens(db: D1Database): Promise<void> {
   await db.batch([
     db.prepare("DELETE FROM access_tokens WHERE expires_at < ?").bind(now),
     db.prepare("DELETE FROM refresh_tokens WHERE expires_at < ?").bind(now),
-    db.prepare("DELETE FROM auth_codes WHERE expires_at < ?").bind(now)
+    db.prepare("DELETE FROM auth_codes WHERE expires_at < ?").bind(now),
+    db.prepare("DELETE FROM jwt_replay_cache WHERE expires_at < ?").bind(now)
   ]);
 }
 

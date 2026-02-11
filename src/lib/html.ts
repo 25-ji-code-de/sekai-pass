@@ -497,6 +497,17 @@ export const styles = `
     color: #889;
     line-height: 1.4;
   }
+  
+  .user-badge-text {
+    font-size: 11px; 
+    margin-top: 6px; 
+    display: inline-block; 
+    padding: 2px 8px; 
+    background: rgba(255,255,255,0.05); 
+    border-radius: 10px; 
+    border: 1px solid rgba(255,255,255,0.1);
+    font-family: var(--code-font);
+  }
 
   .security-context {
     display: flex;
@@ -785,7 +796,13 @@ export function authorizePage(app: any, user: any): string {
       </div>
 
       <h2 class="auth-title-large">授权访问请求</h2>
-      <p class="auth-subtitle-large">应用 <strong>${app.name}</strong> 正在请求访问您的账号</p>
+      <p class="auth-subtitle-large">
+        应用 <strong>${app.name}</strong> 正在请求访问您的账号
+        <br>
+        <span class="user-badge-text">
+          <span style="opacity: 0.6;">登录身份:</span> ${user.username}
+        </span>
+      </p>
 
       <div class="scope-list">
         ${scopeListHtml}
@@ -805,6 +822,10 @@ export function authorizePage(app: any, user: any): string {
           <button type="submit" name="action" value="deny" class="btn-secondary">拒绝</button>
         </div>
         
+        <div class="privacy-note">
+          授权即代表您同意该应用按照其服务条款和隐私政策使用您的公开信息。
+        </div>
+
         <div class="security-context">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
           <span>授权后将重定向至: <strong style="color: var(--text-main);">${redirectHost}</strong></span>

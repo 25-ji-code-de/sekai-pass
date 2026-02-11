@@ -128,7 +128,13 @@ export async function renderAuthorize(app, api, navigate) {
         </div>
 
         <h2 class="auth-title-large">授权访问请求</h2>
-        <p class="auth-subtitle-large">应用 <strong>${appInfo.name}</strong> 正在请求访问您的账号</p>
+        <p class="auth-subtitle-large">
+          应用 <strong>${appInfo.name}</strong> 正在请求访问您的账号
+          <br>
+          <span class="user-badge-text" style="font-size: 11px; margin-top: 6px; display: inline-block; padding: 2px 8px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+            <span style="opacity: 0.6;">登录身份:</span> <strong style="color: var(--text-main);">${user.username}</strong>
+          </span>
+        </p>
 
         <div class="scope-list">
           ${scopeListHtml}
@@ -137,6 +143,10 @@ export async function renderAuthorize(app, api, navigate) {
         <div class="authorize-actions">
           <button id="allow-btn">允许访问</button>
           <button id="deny-btn" class="btn-secondary">拒绝</button>
+        </div>
+        
+        <div class="privacy-note">
+          授权即代表您同意该应用按照其服务条款和隐私政策使用您的公开信息。
         </div>
         
         <div class="security-context">

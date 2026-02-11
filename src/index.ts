@@ -182,7 +182,8 @@ app.get("/oauth/authorize", async (c) => {
 
   if (!user) {
     const params = new URLSearchParams(c.req.query());
-    return c.redirect(`/login?redirect=/oauth/authorize?${params.toString()}`);
+    const redirectPath = `/oauth/authorize?${params.toString()}`;
+    return c.redirect(`/login?redirect=${encodeURIComponent(redirectPath)}`);
   }
 
   const clientId = c.req.query("client_id");

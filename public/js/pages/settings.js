@@ -81,11 +81,31 @@ export async function renderSettings(app, api, navigate) {
   }
 
   function updateAvatarPreview(url, username) {
-      if (!url) {
+      if (!url || !url.trim()) {
           renderInitials(username);
           return;
       }
-      
+
+      // Basic URL validation
+      try {
+          const urlObj = new URL(url);
+          if (urlObj.protocol !== 'https:') {
+              renderInitials(username);
+              return;
+          }
+      } catch {
+          renderInitials(username);
+          return;
+      }
+
+      // Show loading state
+      avatarPreviewBox.innerHTML = '';
+      const loadingSpan = document.createElement('span');
+      loadingSpan.className = 'initials';
+      loadingSpan.style.opacity = '0.5';
+      loadingSpan.innerText = '...';
+      avatarPreviewBox.appendChild(loadingSpan);
+
       // Create temp image to test load
       const img = new Image();
       img.onload = () => {
@@ -133,13 +153,15 @@ export async function renderSettings(app, api, navigate) {
     }
   }
 
-  // Handle live preview
+  // Handle live preview with debounce
   const avatarInput = document.getElementById('avatar_url');
+  let previewTimeout;
   avatarInput.addEventListener('input', (e) => {
-      // Use current user username or inputs? 
-      // If we don't have username loaded yet, wait.
-      const username = currentUser.username || '??';
-      updateAvatarPreview(e.target.value, username);
+      clearTimeout(previewTimeout);
+      previewTimeout = setTimeout(() => {
+          const username = currentUser.username || '??';
+          updateAvatarPreview(e.target.value.trim(), username);
+      }, 500);
   });
 
   // Handle form submission
@@ -155,20 +177,34 @@ export async function renderSettings(app, api, navigate) {
 
     try {
       const updateData = {};
-      if (displayName !== null) updateData.display_name = displayName;
-      if (avatarUrl !== null) updateData.avatar_url = avatarUrl;
-      
-      // If empty object, maybe still valid if clearing? 
-      // API probably handles checks.
+      if (displayName) updateData.display_name = displayName;
+      if (avatarUrl) {
+          // Validate URL before submitting
+          try {
+              const urlObj = new URL(avatarUrl);
+              if (urlObj.protocol !== 'https:') {
+                  showError('头像 URL 必须使用 HTTPS 协议');
+                  setLoading(saveBtn, false);
+                  return;
+              }
+              updateData.avatar_url = avatarUrl;
+          } catch {
+              showError('请输入有效的 URL 地址');
+              setLoading(saveBtn, false);
+              return;
+          }
+      }
 
       await api.put('/auth/profile', updateData, {
         headers: api.getAuthHeaders()
       });
 
       showSuccess('资料更新成功 // PROFILE UPDATED');
-      
-      // Update local cache display if needed? No need, page refresh or navigation handles it usually.
-      
+
+      // Update local cache
+      currentUser.display_name = displayName || currentUser.display_name;
+      currentUser.avatar_url = avatarUrl || currentUser.avatar_url;
+
     } catch (error) {
       showError(error.message || '更新失败，请重试');
     } finally {

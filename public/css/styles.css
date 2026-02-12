@@ -675,6 +675,20 @@ button:disabled {
   font-size: 32px;
   font-weight: bold;
   color: var(--text-muted);
+  transition: opacity 0.2s ease;
+}
+
+.avatar-preview img {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .profile-meta {
@@ -735,6 +749,15 @@ input:disabled {
   font-size: 11px;
   color: var(--text-muted);
   opacity: 0.7;
+  font-family: var(--code-font);
+}
+
+input[type="url"]:invalid:not(:placeholder-shown) {
+  border-color: rgba(var(--error-color) / 0.5);
+}
+
+input[type="url"]:valid:not(:placeholder-shown) {
+  border-color: rgba(var(--success-color) / 0.3);
 }
 
 .settings-actions {

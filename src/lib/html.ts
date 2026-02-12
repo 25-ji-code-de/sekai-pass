@@ -699,7 +699,7 @@ export function dashboardPage(user: any): string {
       ${user.displayName ? `<p><strong>昵称</strong> <span>${user.displayName}</span></p>` : ""}
     </div>
     <form method="POST" action="/logout">
-      <button type="submit" style="background: linear-gradient(135deg, #718093 0%, #2f3640 100%); width: auto; min-width: 120px; float: right;">退出登录</button>
+      <button type="submit" class="btn-secondary btn-auto" style="float: right;">退出登录</button>
       <div style="clear: both;"></div>
     </form>
   `);

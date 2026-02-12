@@ -585,3 +585,167 @@ button:disabled {
   color: var(--primary-color);
 }
 
+
+/* Secondary Button Styles */
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+.btn-secondary:hover {
+  border-color: var(--text-muted);
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.btn-danger-outline {
+  background: transparent;
+  border: 1px solid rgba(var(--error-color) / 0.3);
+  color: rgba(var(--error-color) / 0.8);
+  box-shadow: none;
+}
+
+.btn-danger-outline:hover {
+  border-color: rgba(var(--error-color) / 0.8);
+  color: rgb(var(--error-color));
+  background: rgba(var(--error-color) / 0.05);
+  box-shadow: 0 4px 20px rgba(var(--error-color) / 0.15);
+}
+
+/* Override for auto width buttons */
+.btn-auto {
+  width: auto;
+  min-width: 120px;
+  display: inline-block;
+}
+
+
+/* Settings Page Enhancements */
+.settings-header {
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 32px;
+  padding-bottom: 16px; 
+}
+
+.settings-header h2 {
+  font-family: var(--code-font);
+  font-size: 14px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--primary-color);
+  margin: 0;
+}
+
+.settings-profile-section {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 32px;
+  padding: 20px;
+  background: rgba(var(--bg-white) / 0.02);
+  border: 1px dashed var(--border-color);
+  border-radius: 4px;
+}
+
+.avatar-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--bg-black);
+  border: 2px solid var(--border-color);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-preview .initials {
+  font-size: 32px;
+  font-weight: bold;
+  color: var(--text-muted);
+}
+
+.profile-meta {
+  flex: 1;
+}
+
+.meta-row {
+  display: flex;
+  margin-bottom: 8px;
+  font-family: var(--code-font);
+  font-size: 12px;
+}
+
+.meta-row:last-child {
+  margin-bottom: 0;
+}
+
+.meta-row .label {
+  color: var(--text-muted);
+  width: 80px;
+}
+
+.meta-row .value {
+  color: var(--text-main);
+}
+
+.form-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 32px 0;
+  position: relative;
+}
+
+.form-divider::after {
+  content: 'EDITABLE DATA';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--card-bg);
+  padding: 0 12px;
+  font-family: var(--code-font);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+input:disabled {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: transparent;
+  color: var(--text-muted);
+  cursor: not-allowed;
+  font-family: var(--code-font);
+}
+
+.input-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 32px;
+  gap: 16px;
+}
+
+
+.settings-container {
+  max-width: 500px;
+}

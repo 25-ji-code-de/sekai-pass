@@ -10,53 +10,121 @@ export async function renderSettings(app, api, navigate) {
   api.setAuthToken(token);
 
   app.innerHTML = `
-    <div class="container">
+    <div class="container settings-container">
       <div class="logo">
         <img src="/logo.png" alt="SEKAI Pass" width="300" />
       </div>
-      <h2 style="text-align: center; margin-bottom: 2rem;">账号设置</h2>
+      
+      <div class="settings-header">
+        <h2>System Settings // Account</h2>
+      </div>
+
       <div id="error-message" class="error" style="display: none;"></div>
       <div id="success-message" class="success" style="display: none;"></div>
-      <form id="settings-form">
-        <div class="form-group">
-          <label for="username">用户名</label>
-          <input type="text" id="username" disabled />
+
+      <div class="settings-profile-section">
+        <div class="avatar-preview" id="avatar-preview-box">
+           <span class="initials" id="avatar-initials">--</span>
         </div>
-        <div class="form-group">
-          <label for="email">邮箱</label>
-          <input type="email" id="email" disabled />
+        <div class="profile-meta">
+           <div class="meta-row">
+              <span class="label">IDENTITY:</span> <span class="value" id="disp-username">LOADING...</span>
+           </div>
+           <div class="meta-row">
+              <span class="label">EMAIL:</span> <span class="value" id="disp-email">...</span>
+           </div>
+           <div class="meta-row">
+              <span class="label">STATUS:</span> <span class="value" style="color: var(--success-color);">ACTIVE</span>
+           </div>
         </div>
-        <div class="form-group">
-          <label for="display_name">昵称</label>
-          <input type="text" id="display_name" maxlength="50" placeholder="设置你的昵称" />
-        </div>
-        <div class="form-group">
-          <label for="avatar_url">头像 URL</label>
-          <input type="url" id="avatar_url" maxlength="500" placeholder="https://example.com/avatar.jpg" />
-          <small style="color: var(--text-secondary); font-size: 0.85rem;">输入图片链接作为头像</small>
-        </div>
-        <button type="submit" id="save-btn">保存修改</button>
-      </form>
-      <div style="margin-top: 2rem; text-align: center;">
-        <button id="back-btn" style="background: linear-gradient(135deg, #718093 0%, #2f3640 100%); width: auto; min-width: 120px;">返回</button>
       </div>
+
+      <div class="form-divider"></div>
+
+      <form id="settings-form">
+        <!-- Hidden inputs to store original values if needed -->
+        <input type="hidden" id="username" />
+        <input type="hidden" id="email" />
+
+        <div class="form-group">
+          <label for="display_name">Display Name // 昵称</label>
+          <input type="text" id="display_name" maxlength="50" placeholder="Enter your display name" />
+        </div>
+
+        <div class="form-group">
+          <label for="avatar_url">Avatar Source // 头像 URL</label>
+          <input type="url" id="avatar_url" maxlength="500" placeholder="https://example.com/avatar.jpg" />
+          <span class="input-hint">Enter a direct link to an image. HTTPS required.</span>
+        </div>
+
+        <div class="settings-actions">
+           <button type="button" id="back-btn" class="btn-secondary btn-auto">返回</button>
+           <button type="submit" id="save-btn" class="btn-auto" style="min-width: 140px;">保存修改</button>
+        </div>
+      </form>
     </div>
+    
     <footer class="site-footer">
       <a href="https://docs.nightcord.de5.net/legal/complete/privacy-sekai-pass" target="_blank">隐私政策</a> |
       <a href="https://docs.nightcord.de5.net/legal/complete/terms-sekai-pass" target="_blank">用户服务协议</a>
     </footer>
   `;
 
+  const avatarPreviewBox = document.getElementById('avatar-preview-box');
+  
+  function renderInitials(username) {
+      avatarPreviewBox.innerHTML = ''; // Clear
+      const span = document.createElement('span');
+      span.className = 'initials';
+      span.innerText = username ? username.substring(0, 2).toUpperCase() : '??';
+      avatarPreviewBox.appendChild(span);
+  }
+
+  function updateAvatarPreview(url, username) {
+      if (!url) {
+          renderInitials(username);
+          return;
+      }
+      
+      // Create temp image to test load
+      const img = new Image();
+      img.onload = () => {
+          avatarPreviewBox.innerHTML = '';
+          const displayImg = document.createElement('img');
+          displayImg.src = url;
+          avatarPreviewBox.appendChild(displayImg);
+      };
+      img.onerror = () => {
+          renderInitials(username);
+      };
+      img.src = url;
+  }
+
+  // Back button handler
+  document.getElementById('back-btn').addEventListener('click', () => {
+      navigate('/dashboard');
+  });
+
   // Load user info
+  let currentUser = {}; // Store for reference
+  
   try {
     const user = await api.get('/auth/me', {
       headers: api.getAuthHeaders()
     });
+    currentUser = user;
 
     document.getElementById('username').value = user.username;
     document.getElementById('email').value = user.email;
     document.getElementById('display_name').value = user.display_name || '';
     document.getElementById('avatar_url').value = user.avatar_url || '';
+    
+    // Update Display Elements
+    document.getElementById('disp-username').innerText = user.username;
+    document.getElementById('disp-email').innerText = user.email;
+
+    updateAvatarPreview(user.avatar_url, user.username);
+
   } catch (error) {
     showError('获取用户信息失败');
     if (error.status === 401) {
@@ -64,6 +132,15 @@ export async function renderSettings(app, api, navigate) {
       navigate('/login');
     }
   }
+
+  // Handle live preview
+  const avatarInput = document.getElementById('avatar_url');
+  avatarInput.addEventListener('input', (e) => {
+      // Use current user username or inputs? 
+      // If we don't have username loaded yet, wait.
+      const username = currentUser.username || '??';
+      updateAvatarPreview(e.target.value, username);
+  });
 
   // Handle form submission
   const form = document.getElementById('settings-form');
@@ -78,30 +155,24 @@ export async function renderSettings(app, api, navigate) {
 
     try {
       const updateData = {};
-      if (displayName) updateData.display_name = displayName;
-      if (avatarUrl) updateData.avatar_url = avatarUrl;
-
-      if (Object.keys(updateData).length === 0) {
-        showError('请至少填写一个字段');
-        setLoading(saveBtn, false);
-        return;
-      }
+      if (displayName !== null) updateData.display_name = displayName;
+      if (avatarUrl !== null) updateData.avatar_url = avatarUrl;
+      
+      // If empty object, maybe still valid if clearing? 
+      // API probably handles checks.
 
       await api.put('/auth/profile', updateData, {
         headers: api.getAuthHeaders()
       });
 
-      showSuccess('资料更新成功');
+      showSuccess('资料更新成功 // PROFILE UPDATED');
+      
+      // Update local cache display if needed? No need, page refresh or navigation handles it usually.
+      
     } catch (error) {
       showError(error.message || '更新失败，请重试');
     } finally {
       setLoading(saveBtn, false);
     }
-  });
-
-  // Handle back button
-  const backBtn = document.getElementById('back-btn');
-  backBtn.addEventListener('click', () => {
-    navigate('/dashboard');
   });
 }

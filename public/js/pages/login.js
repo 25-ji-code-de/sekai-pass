@@ -23,9 +23,9 @@ export function renderLogin(app, api, navigate) {
           <label for="password">密码</label>
           <input type="password" id="password" name="password" required placeholder="请输入密码" autocomplete="current-password">
         </div>
-        <div class="form-group" style="display: flex; justify-content: center;">
+        <div class="form-group captcha-container">
           <div id="turnstile-widget"></div>
-          <div id="pow-status" style="display: none; text-align: center; padding: 10px; color: #aaa; font-size: 14px;"></div>
+          <div id="pow-status" class="pow-status" style="display: none;"></div>
         </div>
         <button type="submit" id="login-btn">登录</button>
       </form>
@@ -75,26 +75,27 @@ export function renderLogin(app, api, navigate) {
 
       // Turnstile unavailable or render failed → PoW
       turnstileWidget.style.display = 'none';
-      powStatus.style.display = 'block';
-      powStatus.textContent = '正在验证...';
+      powStatus.style.display = 'flex';
+      powStatus.innerHTML = '<div class="pow-spinner"></div><span>验证环境安全...</span>';
+      powStatus.className = 'pow-status';
 
       await challengeReady;
       if (!challengeId) {
-        powStatus.textContent = '验证初始化失败，请刷新重试';
-        powStatus.style.color = '#f44336';
+        powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证初始化失败，请刷新重试</span>';
+        powStatus.className = 'pow-status error';
         return;
       }
 
       const result = await api.post('/challenge/report', { challengeId, turnstileLoaded: false });
       powNonce = await solvePoW(result.challenge, result.difficulty);
       captchaMode = 'pow';
-      powStatus.textContent = '验证完成 ✓';
-      powStatus.style.color = '#4caf50';
+      powStatus.innerHTML = '<span class="pow-icon">✓</span><span>环境验证通过</span>';
+      powStatus.className = 'pow-status success';
     } catch (err) {
       console.error('Captcha init failed:', err);
-      powStatus.style.display = 'block';
-      powStatus.textContent = '验证失败，请刷新重试';
-      powStatus.style.color = '#f44336';
+      powStatus.style.display = 'flex';
+      powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证失败，请刷新重试</span>';
+      powStatus.className = 'pow-status error';
     }
   }
 

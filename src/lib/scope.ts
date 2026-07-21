@@ -40,7 +40,7 @@ export type Scope = typeof SCOPES[keyof typeof SCOPES];
  */
 export const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
   [SCOPES.OPENID]: "OpenID Connect 身份验证",
-  [SCOPES.PROFILE]: "访问您的基本信息（用户名、显示名称）",
+  [SCOPES.PROFILE]: "访问您的基本信息（用户名、显示名称、头像、个性签名）",
   [SCOPES.EMAIL]: "访问您的电子邮件地址",
   [SCOPES.APPLICATIONS]: "管理您的 OAuth 应用程序",
   [SCOPES.ADMIN]: "管理员权限"
@@ -172,6 +172,8 @@ export function filterUserData(user: any, scopes: string): any {
     filtered.id = user.id;
     filtered.username = user.username;
     filtered.display_name = user.display_name;
+    if (user.avatar_url) filtered.avatar_url = user.avatar_url;
+    if (user.bio) filtered.bio = user.bio;
   }
 
   // Email scope: email address

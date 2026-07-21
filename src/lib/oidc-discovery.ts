@@ -82,6 +82,8 @@ export function generateOIDCMetadata(baseUrl: string): OIDCMetadata {
       "nonce",
       "name",
       "preferred_username",
+      "picture",
+      "bio",
       "email",
       "email_verified",
       "acr",

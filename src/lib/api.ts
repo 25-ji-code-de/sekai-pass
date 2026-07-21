@@ -321,11 +321,22 @@ apiRouter.get("/auth/me", async (c) => {
     return c.json({ error: "未授权" }, 401);
   }
 
+  // Session attributes may lag behind profile updates; read latest from DB
+  const row = await c.env.DB.prepare(
+    "SELECT id, username, email, display_name, avatar_url, bio FROM users WHERE id = ?"
+  ).bind(user.id).first();
+
+  if (!row) {
+    return c.json({ error: "未授权" }, 401);
+  }
+
   return c.json({
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    display_name: user.displayName
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    display_name: row.display_name,
+    avatar_url: row.avatar_url,
+    bio: row.bio
   }, 200, {
     "Cache-Control": "no-store",
     "Pragma": "no-cache"
@@ -342,7 +353,7 @@ apiRouter.put("/auth/profile", async (c) => {
 
   try {
     const body = await c.req.json();
-    const { display_name, avatar_url } = body;
+    const { display_name, avatar_url, bio } = body;
 
     // Validate fields
     if (display_name !== undefined && display_name !== null) {
@@ -351,15 +362,24 @@ apiRouter.put("/auth/profile", async (c) => {
       }
     }
 
-    if (avatar_url !== undefined && avatar_url !== null) {
+    if (avatar_url !== undefined && avatar_url !== null && avatar_url !== '') {
       if (typeof avatar_url !== 'string' || avatar_url.length > 500) {
         return c.json({ error: "头像 URL 长度不能超过 500 个字符" }, 400);
       }
-      // Basic URL validation
+      // Basic URL validation — require HTTPS
       try {
-        new URL(avatar_url);
+        const urlObj = new URL(avatar_url);
+        if (urlObj.protocol !== 'https:') {
+          return c.json({ error: "头像 URL 必须使用 HTTPS 协议" }, 400);
+        }
       } catch {
         return c.json({ error: "头像 URL 格式无效" }, 400);
+      }
+    }
+
+    if (bio !== undefined && bio !== null) {
+      if (typeof bio !== 'string' || bio.length > 200) {
+        return c.json({ error: "个性签名长度不能超过 200 个字符" }, 400);
       }
     }
 
@@ -368,11 +388,15 @@ apiRouter.put("/auth/profile", async (c) => {
 
     if (display_name !== undefined) {
       updates.push('display_name = ?');
-      params.push(display_name);
+      params.push(display_name === '' ? null : display_name);
     }
     if (avatar_url !== undefined) {
       updates.push('avatar_url = ?');
-      params.push(avatar_url);
+      params.push(avatar_url === '' ? null : avatar_url);
+    }
+    if (bio !== undefined) {
+      updates.push('bio = ?');
+      params.push(bio === '' ? null : bio);
     }
 
     if (updates.length === 0) {
@@ -391,7 +415,7 @@ apiRouter.put("/auth/profile", async (c) => {
 
     // Get updated user info
     const updatedUser = await c.env.DB.prepare(
-      "SELECT id, username, email, display_name, avatar_url FROM users WHERE id = ?"
+      "SELECT id, username, email, display_name, avatar_url, bio FROM users WHERE id = ?"
     ).bind(user.id).first();
 
     return c.json({
@@ -401,7 +425,8 @@ apiRouter.put("/auth/profile", async (c) => {
         username: updatedUser.username,
         email: updatedUser.email,
         display_name: updatedUser.display_name,
-        avatar_url: updatedUser.avatar_url
+        avatar_url: updatedUser.avatar_url,
+        bio: updatedUser.bio
       } : null
     });
   } catch (error) {

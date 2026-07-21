@@ -37,6 +37,8 @@ export interface IDTokenClaims {
   nonce?: string;
   name?: string;
   preferred_username?: string;
+  picture?: string;
+  bio?: string;
   email?: string;
   email_verified?: boolean;
   acr?: string;
@@ -74,6 +76,12 @@ export function buildIDTokenClaims(
   if (hasScopes(scope, [SCOPES.PROFILE])) {
     claims.name = user.display_name;
     claims.preferred_username = user.username;
+    if (user.avatar_url) {
+      claims.picture = user.avatar_url;
+    }
+    if (user.bio) {
+      claims.bio = user.bio;
+    }
   }
 
   if (hasScopes(scope, [SCOPES.EMAIL])) {

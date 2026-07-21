@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     hashed_password TEXT NOT NULL,
     display_name TEXT,
     avatar_url TEXT,
+    bio TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );

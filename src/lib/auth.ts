@@ -65,7 +65,8 @@ class D1Adapter implements Adapter {
         username: result.username as string,
         email: result.email as string,
         display_name: result.display_name as string | null,
-        avatar_url: result.avatar_url as string | null
+        avatar_url: result.avatar_url as string | null,
+        bio: result.bio as string | null
       }
     };
 
@@ -126,7 +127,8 @@ export function initializeLucia(db: D1Database) {
         username: attributes.username,
         email: attributes.email,
         displayName: attributes.display_name,
-        avatarUrl: attributes.avatar_url
+        avatarUrl: attributes.avatar_url,
+        bio: attributes.bio
       };
     }
   });
@@ -138,6 +140,7 @@ export interface DatabaseUser {
   email: string;
   display_name: string | null;
   avatar_url: string | null;
+  bio: string | null;
 }
 
 declare module "lucia" {

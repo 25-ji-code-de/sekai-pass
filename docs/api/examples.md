@@ -61,9 +61,29 @@ curl -X GET https://id.nightcord.de5.net/api/auth/me \
   "id": "user_id",
   "username": "testuser",
   "email": "test@example.com",
-  "display_name": "Test User"
+  "display_name": "Test User",
+  "avatar_url": "https://storage.nightcord.de5.net/avatars/xxx.webp",
+  "bio": "Hello, SEKAI"
 }
 ```
+
+### 3.1 更新用户资料（昵称 / 头像 / 个性签名）
+
+```bash
+curl -X PUT https://id.nightcord.de5.net/api/auth/profile \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "display_name": "Test User",
+    "avatar_url": "https://storage.nightcord.de5.net/avatars/xxx.webp",
+    "bio": "Hello, SEKAI"
+  }'
+```
+
+字段说明：
+- `display_name`：昵称，最多 50 字符，可传空字符串清空
+- `avatar_url`：头像 HTTPS URL，最多 500 字符，可传空字符串清空
+- `bio`：个性签名，最多 200 字符，可传空字符串清空
 
 ### 4. 获取 OAuth 应用信息
 

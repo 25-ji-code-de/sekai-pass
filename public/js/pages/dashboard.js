@@ -37,10 +37,17 @@ export async function renderDashboard(app, api, navigate) {
     });
 
     const userInfoDiv = document.getElementById('user-info');
+    const escapeHtml = (s) => String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
     userInfoDiv.innerHTML = `
-      <p><strong>用户名</strong> <span>${user.username}</span></p>
-      <p><strong>邮箱</strong> <span>${user.email}</span></p>
-      ${user.display_name ? `<p><strong>昵称</strong> <span>${user.display_name}</span></p>` : ''}
+      <p><strong>用户名</strong> <span>${escapeHtml(user.username)}</span></p>
+      <p><strong>邮箱</strong> <span>${escapeHtml(user.email)}</span></p>
+      ${user.display_name ? `<p><strong>昵称</strong> <span>${escapeHtml(user.display_name)}</span></p>` : ''}
+      ${user.bio ? `<p><strong>个性签名</strong> <span>${escapeHtml(user.bio)}</span></p>` : ''}
     `;
   } catch (error) {
     showError('获取用户信息失败');

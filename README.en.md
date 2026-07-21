@@ -185,10 +185,13 @@ Response:
 
 ```json
 {
-  "id": "user-id",
-  "username": "username",
+  "sub": "user-id",
+  "preferred_username": "username",
+  "name": "Display Name",
+  "picture": "https://storage.nightcord.de5.net/avatars/xxx.webp",
+  "bio": "Hello, SEKAI",
   "email": "user@example.com",
-  "display_name": "Display Name"
+  "email_verified": true
 }
 ```
 
@@ -319,6 +322,7 @@ CREATE TABLE users (
     hashed_password TEXT NOT NULL,
     display_name TEXT,
     avatar_url TEXT,
+    bio TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );

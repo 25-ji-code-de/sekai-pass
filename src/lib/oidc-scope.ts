@@ -42,7 +42,7 @@ export function getClaimsForScope(scopeString: string): string[] {
   for (const scope of scopes) {
     switch (scope) {
       case SCOPES.PROFILE:
-        claims.push("name", "preferred_username");
+        claims.push("name", "preferred_username", "picture", "bio");
         break;
       case SCOPES.EMAIL:
         claims.push("email", "email_verified");

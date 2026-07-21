@@ -606,7 +606,7 @@ app.get("/oauth/userinfo", async (c) => {
 
   // Get user info
   const user = await c.env.DB.prepare(
-    "SELECT id, username, email, display_name FROM users WHERE id = ?"
+    "SELECT id, username, email, display_name, avatar_url, bio FROM users WHERE id = ?"
   ).bind(tokenInfo.userId).first();
 
   if (!user) {
@@ -622,6 +622,12 @@ app.get("/oauth/userinfo", async (c) => {
   if (hasScopes(tokenInfo.scope, [SCOPES.PROFILE])) {
     userInfo.preferred_username = user.username;
     userInfo.name = user.display_name;
+    if (user.avatar_url) {
+      userInfo.picture = user.avatar_url;
+    }
+    if (user.bio) {
+      userInfo.bio = user.bio;
+    }
   }
 
   if (hasScopes(tokenInfo.scope, [SCOPES.EMAIL])) {

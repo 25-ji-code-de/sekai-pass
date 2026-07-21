@@ -57,6 +57,150 @@ function isLoopback(url: string): boolean {
   }
 }
 
+type ProfileFieldError = { error: string };
+
+function emptyToNull(value: string): string | null {
+  return value === '' ? null : value;
+}
+
+function validateDisplayName(value: unknown): ProfileFieldError | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || value.length > 50) {
+    return { error: "昵称长度不能超过 50 个字符" };
+  }
+  return null;
+}
+
+function validateAvatarUrl(value: unknown): ProfileFieldError | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || value.length > 500) {
+    return { error: "头像 URL 长度不能超过 500 个字符" };
+  }
+  try {
+    const urlObj = new URL(value);
+    if (urlObj.protocol !== 'https:') {
+      return { error: "头像 URL 必须使用 HTTPS 协议" };
+    }
+  } catch {
+    return { error: "头像 URL 格式无效" };
+  }
+  return null;
+}
+
+function validateBio(value: unknown): ProfileFieldError | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || value.length > 200) {
+    return { error: "个性签名长度不能超过 200 个字符" };
+  }
+  return null;
+}
+
+function buildProfileUpdate(
+  body: { display_name?: unknown; avatar_url?: unknown; bio?: unknown }
+): { error: string } | { updates: string[]; params: unknown[] } {
+  const fieldError =
+    validateDisplayName(body.display_name) ||
+    validateAvatarUrl(body.avatar_url) ||
+    validateBio(body.bio);
+  if (fieldError) return fieldError;
+
+  const updates: string[] = [];
+  const params: unknown[] = [];
+
+  if (body.display_name !== undefined) {
+    updates.push('display_name = ?');
+    params.push(emptyToNull(body.display_name as string));
+  }
+  if (body.avatar_url !== undefined) {
+    updates.push('avatar_url = ?');
+    params.push(emptyToNull(body.avatar_url as string));
+  }
+  if (body.bio !== undefined) {
+    updates.push('bio = ?');
+    params.push(emptyToNull(body.bio as string));
+  }
+
+  if (updates.length === 0) {
+    return { error: "没有需要更新的字段" };
+  }
+
+  return { updates, params };
+}
+
+function mapUserRow(row: Record<string, unknown> | null) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    display_name: row.display_name,
+    avatar_url: row.avatar_url,
+    bio: row.bio
+  };
+}
+
+type AuthorizeValidation =
+  | { error: string; status: 400 | 403 | 404 }
+  | {
+      client_id: string;
+      redirect_uri: string;
+      code_challenge: string;
+      method: string;
+      state: string | null;
+      scope: string;
+    };
+
+function validateAuthorizeRequest(
+  body: Record<string, any>,
+  app: { redirect_uris: string } | null
+): AuthorizeValidation {
+  const { client_id, redirect_uri, code_challenge, code_challenge_method, action, state } = body;
+
+  if (action === "deny") {
+    return { error: "access_denied", status: 403 };
+  }
+
+  if (!client_id || !redirect_uri) {
+    return { error: "缺少必要参数", status: 400 };
+  }
+
+  if (!app) {
+    return { error: "应用不存在", status: 404 };
+  }
+
+  const allowedUris = parseRedirectUris(app.redirect_uris);
+  if (!allowedUris.includes(redirect_uri)) {
+    return { error: "Invalid redirect URI", status: 400 };
+  }
+
+  if (redirect_uri.startsWith('http:') && !isLoopback(redirect_uri)) {
+    return { error: "redirect_uri must use HTTPS", status: 400 };
+  }
+
+  if (!code_challenge) {
+    return { error: "code_challenge is required (PKCE mandatory)", status: 400 };
+  }
+
+  const method = code_challenge_method || 'S256';
+  if (method !== 'S256') {
+    return { error: "Only S256 code_challenge_method is supported", status: 400 };
+  }
+
+  const scopeValidation = validateScopeParameter(body.scope || null);
+  if (!scopeValidation.valid) {
+    return { error: scopeValidation.error || "Invalid scope", status: 400 };
+  }
+
+  return {
+    client_id,
+    redirect_uri,
+    code_challenge,
+    method,
+    state: state || null,
+    scope: formatScopes(scopeValidation.scopes)
+  };
+}
+
 // Public configuration endpoint
 apiRouter.get("/config", async (c) => {
   return c.json({
@@ -353,59 +497,14 @@ apiRouter.put("/auth/profile", async (c) => {
 
   try {
     const body = await c.req.json();
-    const { display_name, avatar_url, bio } = body;
-
-    // Validate fields
-    if (display_name !== undefined && display_name !== null) {
-      if (typeof display_name !== 'string' || display_name.length > 50) {
-        return c.json({ error: "昵称长度不能超过 50 个字符" }, 400);
-      }
+    const built = buildProfileUpdate(body);
+    if ('error' in built) {
+      return c.json({ error: built.error }, 400);
     }
 
-    if (avatar_url !== undefined && avatar_url !== null && avatar_url !== '') {
-      if (typeof avatar_url !== 'string' || avatar_url.length > 500) {
-        return c.json({ error: "头像 URL 长度不能超过 500 个字符" }, 400);
-      }
-      // Basic URL validation — require HTTPS
-      try {
-        const urlObj = new URL(avatar_url);
-        if (urlObj.protocol !== 'https:') {
-          return c.json({ error: "头像 URL 必须使用 HTTPS 协议" }, 400);
-        }
-      } catch {
-        return c.json({ error: "头像 URL 格式无效" }, 400);
-      }
-    }
-
-    if (bio !== undefined && bio !== null) {
-      if (typeof bio !== 'string' || bio.length > 200) {
-        return c.json({ error: "个性签名长度不能超过 200 个字符" }, 400);
-      }
-    }
-
-    const updates = [];
-    const params = [];
-
-    if (display_name !== undefined) {
-      updates.push('display_name = ?');
-      params.push(display_name === '' ? null : display_name);
-    }
-    if (avatar_url !== undefined) {
-      updates.push('avatar_url = ?');
-      params.push(avatar_url === '' ? null : avatar_url);
-    }
-    if (bio !== undefined) {
-      updates.push('bio = ?');
-      params.push(bio === '' ? null : bio);
-    }
-
-    if (updates.length === 0) {
-      return c.json({ error: "没有需要更新的字段" }, 400);
-    }
-
+    const { updates, params } = built;
     updates.push('updated_at = ?');
-    params.push(Date.now());
-    params.push(user.id);
+    params.push(Date.now(), user.id);
 
     await c.env.DB.prepare(`
       UPDATE users
@@ -413,21 +512,13 @@ apiRouter.put("/auth/profile", async (c) => {
       WHERE id = ?
     `).bind(...params).run();
 
-    // Get updated user info
     const updatedUser = await c.env.DB.prepare(
       "SELECT id, username, email, display_name, avatar_url, bio FROM users WHERE id = ?"
     ).bind(user.id).first();
 
     return c.json({
       success: true,
-      user: updatedUser ? {
-        id: updatedUser.id,
-        username: updatedUser.username,
-        email: updatedUser.email,
-        display_name: updatedUser.display_name,
-        avatar_url: updatedUser.avatar_url,
-        bio: updatedUser.bio
-      } : null
+      user: mapUserRow(updatedUser as Record<string, unknown> | null)
     });
   } catch (error) {
     console.error("Update profile error:", error);
@@ -486,61 +577,29 @@ apiRouter.post("/oauth/authorize", async (c) => {
 
   try {
     const body = await c.req.json();
-    const { client_id, redirect_uri, code_challenge, code_challenge_method, action, state } = body;
+    const app = body.client_id
+      ? await c.env.DB.prepare(
+          "SELECT * FROM applications WHERE client_id = ?"
+        ).bind(body.client_id).first()
+      : null;
 
-    if (action === "deny") {
-      return c.json({ error: "access_denied" }, 403);
+    const validated = validateAuthorizeRequest(
+      body,
+      app ? { redirect_uris: app.redirect_uris as string } : null
+    );
+
+    if ('error' in validated) {
+      return c.json({ error: validated.error }, validated.status);
     }
 
-    if (!client_id || !redirect_uri) {
-      return c.json({ error: "缺少必要参数" }, 400);
-    }
-
-    // Validate redirect_uri against registered URIs
-    const app = await c.env.DB.prepare(
-      "SELECT * FROM applications WHERE client_id = ?"
-    ).bind(client_id).first();
-
-    if (!app) {
-      return c.json({ error: "应用不存在" }, 404);
-    }
-
-    const allowedUris = parseRedirectUris(app.redirect_uris as string);
-    if (!allowedUris.includes(redirect_uri)) {
-      return c.json({ error: "Invalid redirect URI" }, 400);
-    }
-
-    // Enforce HTTPS on redirect_uri (except loopback)
-    if (redirect_uri.startsWith('http:') && !isLoopback(redirect_uri)) {
-      return c.json({ error: "redirect_uri must use HTTPS" }, 400);
-    }
-
-    // OAuth 2.1: PKCE is mandatory for all clients
-    if (!code_challenge) {
-      return c.json({ error: "code_challenge is required (PKCE mandatory)" }, 400);
-    }
-
-    // OAuth 2.1: Only S256 method is allowed
-    const method = code_challenge_method || 'S256';
-    if (method !== 'S256') {
-      return c.json({ error: "Only S256 code_challenge_method is supported" }, 400);
-    }
-
-    // Validate and parse scope
-    const scopeParam = body.scope || null;
-    const scopeValidation = validateScopeParameter(scopeParam);
-    if (!scopeValidation.valid) {
-      return c.json({ error: scopeValidation.error || "Invalid scope" }, 400);
-    }
-    const scope = formatScopes(scopeValidation.scopes);
-
+    const { client_id, redirect_uri, code_challenge, method, state, scope } = validated;
     const code = generateId(32);
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
     const createdAt = Date.now();
 
     await c.env.DB.prepare(
       "INSERT INTO auth_codes (code, user_id, client_id, redirect_uri, expires_at, created_at, code_challenge, code_challenge_method, state, scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(code, user.id, client_id, redirect_uri, expiresAt, createdAt, code_challenge, method, state || null, scope).run();
+    ).bind(code, user.id, client_id, redirect_uri, expiresAt, createdAt, code_challenge, method, state, scope).run();
 
     // OAuth 2.1: Include issuer parameter to prevent mix-up attacks
     const issuer = new URL(c.req.url).origin;

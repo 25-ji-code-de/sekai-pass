@@ -235,14 +235,13 @@ export async function renderSettings(app, api, navigate) {
       const result = await uploader.upload(file, file.name, (percent) => {
         uploadFill.style.width = `${percent}%`;
         uploadPercent.textContent = `${percent}%`;
-      });
+      }, { kind: 'image' });
 
-      // Storage API returns a relative key (e.g. /uuid/file.jpg), not a full URL.
-      // Always build the absolute HTTPS URL from the key — same as nightcord.
-      if (!result || !result.key) {
-        throw new Error('Upload response missing file key');
+      // v2 returns absolute public URL on r2.*; fall back to path/key rebuild.
+      if (!result || (!result.url && !result.uuid && !result.key)) {
+        throw new Error('Upload response missing resource id');
       }
-      const url = uploader.getFileUrl(result.key);
+      const url = result.url || uploader.getFileUrl(result.path || result.key || result.uuid, 'image');
       avatarInput.value = url;
       updateAvatarPreview(url, currentUser.username || '??');
       showSuccess('头像上传成功，记得保存修改');

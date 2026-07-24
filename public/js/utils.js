@@ -7,7 +7,13 @@ export async function encryptPassword(password) {
   const combined = password + '|' + saltHex + '|' + timestamp;
   const encoder = new TextEncoder();
   const data = encoder.encode(combined);
-  return btoa(String.fromCharCode(...data));
+  // Chunked base64 — avoid apply/spread argument limits
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < data.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, data.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 export function generateNonce() {
@@ -53,12 +59,20 @@ export class APIClient {
 
     try {
       const response = await fetch(url, config);
-      const data = await response.json();
+      let data = null;
+      const text = await response.text();
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { message: text };
+        }
+      }
 
       if (!response.ok) {
         throw {
           status: response.status,
-          message: data.error || data.message || 'Request failed',
+          message: (data && (data.error || data.message)) || 'Request failed',
           data
         };
       }

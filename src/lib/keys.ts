@@ -126,8 +126,16 @@ async function encryptPrivateKey(
   combined.set(iv, salt.length);
   combined.set(new Uint8Array(ciphertext), salt.length + iv.length);
 
-  // Base64 encode
-  return btoa(String.fromCharCode(...combined));
+  // Base64 encode (chunked — avoid spread argument limits)
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < combined.length; i += chunk) {
+    binary += String.fromCharCode.apply(
+      null,
+      combined.subarray(i, i + chunk) as unknown as number[],
+    );
+  }
+  return btoa(binary);
 }
 
 /**

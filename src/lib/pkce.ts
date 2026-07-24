@@ -31,22 +31,34 @@ export async function verifyPKCE(
     return false;
   }
 
-  // S256 method: SHA256(verifier) must equal challenge
+  // S256 method: BASE64URL(SHA256(verifier)) must equal challenge
   const encoder = new TextEncoder();
   const data = encoder.encode(codeVerifier);
   const hash = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hash));
-  const computedChallenge = base64URLEncode(hashArray);
-  return computedChallenge === codeChallenge;
+  const computedChallenge = base64URLEncode(new Uint8Array(hash));
+
+  // Constant-time-ish compare (length first; equal length then XOR)
+  if (computedChallenge.length !== codeChallenge.length) {
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < computedChallenge.length; i++) {
+    diff |= computedChallenge.charCodeAt(i) ^ codeChallenge.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 /**
- * Base64 URL encode (without padding)
+ * Base64 URL encode (without padding). Chunked to avoid call-stack limits.
  */
 function base64URLEncode(buffer: number[] | Uint8Array): string {
-  const bytes = buffer instanceof Uint8Array ? Array.from(buffer) : buffer;
-  const base64 = btoa(String.fromCharCode(...bytes));
-  return base64
+  const u8 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < u8.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, u8.subarray(i, i + chunk) as unknown as number[]);
+  }
+  return btoa(binary)
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=/g, '');
@@ -95,8 +107,8 @@ export function validateCodeVerifier(codeVerifier: string | null): boolean {
     return false;
   }
 
-  // Must be base64url format
-  if (!/^[A-Za-z0-9_-]+$/.test(codeVerifier)) {
+  // Must be unreserved characters (RFC 7636) — base64url alphabet is a safe subset
+  if (!/^[A-Za-z0-9._~-]+$/.test(codeVerifier)) {
     return false;
   }
 

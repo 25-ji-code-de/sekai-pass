@@ -2,13 +2,17 @@
 /**
  * Explicit-mode Turnstile loader for SPAs.
  *
- * Do NOT call turnstile.ready() — CF warns that it breaks when invoked
- * before api.js has finished loading (common with async <script> tags).
- * Use the official onload= callback instead, then render().
+ * Do NOT call turnstile.ready() — CF warns it breaks if api.js is not fully loaded.
+ * Use onload= injection, then render().
+ *
+ * 600* / challenge-platform 400 often means the challenge iframe failed (network,
+ * bot score, region). Rebuilding the widget usually makes postMessage races worse;
+ * prefer CF auto-retry, then fall back to PoW via onFatal.
  */
 
 const SCRIPT_BASE = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-const MAX_REBUILD = 2;
+/** Soft deadline: no token by then → treat as failed for callers that poll. */
+const SOFT_DEADLINE_MS = 8000;
 
 /** @type {Promise<boolean> | null} */
 let apiLoadPromise = null;
@@ -17,21 +21,17 @@ function ensureApi() {
   if (apiLoadPromise) return apiLoadPromise;
 
   apiLoadPromise = new Promise((resolve) => {
-    // Real API already present (full render implementation).
     if (typeof window.turnstile?.render === 'function') {
       resolve(true);
       return;
     }
 
-    // Drop any preload tags that lack onload — they race our controlled load.
-    // We still honor a fully-loaded API above; only inject if needed.
     const existing = document.querySelectorAll(
       'script[src*="challenges.cloudflare.com/turnstile"]'
     );
 
     const finish = (ok) => resolve(!!ok && typeof window.turnstile?.render === 'function');
 
-    // If a previous tag is still loading, poll for the real API (no ready()).
     if (existing.length > 0 && typeof window.turnstile?.render !== 'function') {
       const started = Date.now();
       const poll = setInterval(() => {
@@ -40,7 +40,6 @@ function ensureApi() {
           finish(true);
         } else if (Date.now() - started > 12000) {
           clearInterval(poll);
-          // Timed out on preload — inject a controlled onload script as fallback.
           injectWithOnload(finish);
         }
       }, 40);
@@ -77,7 +76,6 @@ function injectWithOnload(finish) {
   setTimeout(() => settle(typeof window.turnstile?.render === 'function'), 12000);
 }
 
-/** Wait two frames so the container is laid out before iframe attach. */
 function afterLayout() {
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
@@ -88,7 +86,12 @@ function afterLayout() {
 
 /**
  * @param {HTMLElement} container
- * @param {{ sitekey: string, theme?: string }} opts
+ * @param {{
+ *   sitekey: string,
+ *   theme?: string,
+ *   onToken?: (token: string) => void,
+ *   onFatal?: (code: string) => void,
+ * }} opts
  * @returns {Promise<null | {
  *   getToken: () => string | null,
  *   reset: () => void,
@@ -105,11 +108,33 @@ export async function mountTurnstile(container, opts) {
 
   await afterLayout();
 
+  // Container must have layout box; zero-size hosts break the challenge iframe.
+  if (container.offsetWidth < 10) {
+    container.style.minWidth = '300px';
+    container.style.minHeight = '65px';
+  }
+
   let token = null;
   let widgetId = null;
-  let rebuilds = 0;
   let destroyed = false;
   let fatal = false;
+  let errorCount = 0;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let softTimer = null;
+
+  const markFatal = (code) => {
+    if (fatal || destroyed) return;
+    fatal = true;
+    if (softTimer != null) {
+      clearTimeout(softTimer);
+      softTimer = null;
+    }
+    try {
+      opts.onFatal?.(String(code ?? 'unknown'));
+    } catch {
+      /* ignore */
+    }
+  };
 
   const clearContainer = () => {
     try {
@@ -120,7 +145,6 @@ export async function mountTurnstile(container, opts) {
       /* ignore */
     }
     widgetId = null;
-    // Remove leftover iframes Turnstile may leave behind
     container.innerHTML = '';
   };
 
@@ -134,11 +158,24 @@ export async function mountTurnstile(container, opts) {
         sitekey: opts.sitekey,
         theme: opts.theme || 'dark',
         appearance: 'always',
-        // We rebuild the whole widget on 600*; CF's own auto-retry can race the iframe.
-        retry: 'never',
+        size: 'normal',
+        // Let CF retry flaky challenges; our own destroy/rebuild worsens postMessage races.
+        retry: 'auto',
+        'retry-interval': 3000,
         'refresh-expired': 'auto',
         callback: (t) => {
           token = t || null;
+          if (token) {
+            if (softTimer != null) {
+              clearTimeout(softTimer);
+              softTimer = null;
+            }
+            try {
+              opts.onToken?.(token);
+            } catch {
+              /* ignore */
+            }
+          }
         },
         'expired-callback': () => {
           token = null;
@@ -150,34 +187,44 @@ export async function mountTurnstile(container, opts) {
           token = null;
           const codeStr = String(code ?? '');
           console.warn('[Turnstile] widget error', codeStr);
+          errorCount += 1;
 
-          // 600* often = first challenge failure. Rebuild a couple times, then mark fatal
-          // so the page can fall back to PoW instead of trapping the user.
-          if (!destroyed && rebuilds < MAX_REBUILD) {
-            rebuilds += 1;
-            setTimeout(() => {
-              if (!destroyed) renderOnce();
-            }, 800 * rebuilds);
-          } else {
-            fatal = true;
+          // 600* = generic challenge failure (often challenge-platform 400 / bot score).
+          // 110* = config (bad sitekey / hostname). Neither is fixed by waiting long.
+          const family = codeStr.slice(0, 3);
+          if (family === '600' || family === '110' || family === '300') {
+            // One CF auto-retry window, then give up so the page can use PoW.
+            if (errorCount >= 2 || family === '110') {
+              markFatal(codeStr);
+            } else {
+              // Second chance only via CF retry:auto; hard-fail after soft deadline.
+            }
           }
+
+          // truthy = we handled (suppress CF default console spam beyond our log)
           return true;
         },
       });
     } catch (err) {
       console.error('[Turnstile] render threw', err);
-      fatal = true;
+      markFatal('render');
     }
   };
 
   renderOnce();
 
-  // If first paint still produces no iframe / no progress, treat as failed mount.
   await new Promise((r) => setTimeout(r, 50));
   if (widgetId == null) {
-    fatal = true;
+    markFatal('no-widget');
     return null;
   }
+
+  softTimer = setTimeout(() => {
+    if (!token && !destroyed) {
+      console.warn('[Turnstile] soft deadline, no token');
+      markFatal('timeout');
+    }
+  }, SOFT_DEADLINE_MS);
 
   return {
     getToken() {
@@ -204,7 +251,7 @@ export async function mountTurnstile(container, opts) {
           const t = this.getToken();
           if (t) return resolve(t);
           if (destroyed || Date.now() - start > timeoutMs) return resolve(null);
-          setTimeout(tick, 120);
+          setTimeout(tick, 100);
         };
         tick();
       });
@@ -212,7 +259,15 @@ export async function mountTurnstile(container, opts) {
     reset() {
       token = null;
       fatal = false;
-      rebuilds = 0;
+      errorCount = 0;
+      if (softTimer != null) {
+        clearTimeout(softTimer);
+        softTimer = null;
+      }
+      softTimer = setTimeout(() => {
+        if (!token && !destroyed) markFatal('timeout');
+      }, SOFT_DEADLINE_MS);
+
       if (widgetId != null && window.turnstile?.reset) {
         try {
           window.turnstile.reset(widgetId);
@@ -225,6 +280,10 @@ export async function mountTurnstile(container, opts) {
     },
     remove() {
       destroyed = true;
+      if (softTimer != null) {
+        clearTimeout(softTimer);
+        softTimer = null;
+      }
       clearContainer();
       token = null;
     },

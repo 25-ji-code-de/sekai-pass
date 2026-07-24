@@ -11,6 +11,7 @@ export function renderLogin(app, api, navigate) {
   let powNonce = null;
   /** @type {null | Awaited<ReturnType<typeof mountTurnstile>>} */
   let turnstileWidget = null;
+  let powFallbackStarted = false;
 
   app.innerHTML = `
     <div class="container">
@@ -72,6 +73,8 @@ export function renderLogin(app, api, navigate) {
   }
 
   async function startPow() {
+    if (powFallbackStarted && captchaMode === 'pow') return;
+    powFallbackStarted = true;
     destroyTurnstile();
     turnstileContainer.style.display = 'none';
     powStatus.style.display = 'flex';
@@ -84,6 +87,7 @@ export function renderLogin(app, api, navigate) {
     if (!challengeId) {
       powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证初始化失败，请刷新重试</span>';
       powStatus.className = 'pow-status error';
+      captchaMode = 'pending';
       return;
     }
 
@@ -94,17 +98,43 @@ export function renderLogin(app, api, navigate) {
     powStatus.className = 'pow-status success';
   }
 
+  async function fallbackToPow(reason) {
+    if (powFallbackStarted) return;
+    console.warn('[Turnstile] falling back to PoW:', reason);
+    try {
+      await startPow();
+    } catch (e) {
+      console.error('PoW fallback failed:', e);
+      powStatus.style.display = 'flex';
+      powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证失败，请刷新重试</span>';
+      powStatus.className = 'pow-status error';
+    }
+  }
+
   async function initCaptcha() {
     captchaMode = 'pending';
     powNonce = null;
+    powFallbackStarted = false;
     destroyTurnstile();
     turnstileContainer.style.display = '';
     powStatus.style.display = 'none';
+
+    // If Turnstile JS cannot reach Cloudflare at all (common on some networks), skip.
+    const reachable = await probeTurnstileHost();
+    if (!reachable) {
+      console.warn('[Turnstile] challenges.cloudflare.com unreachable, using PoW');
+      await startPow();
+      return;
+    }
 
     try {
       turnstileWidget = await mountTurnstile(turnstileContainer, {
         sitekey: turnstileSiteKey,
         theme: 'dark',
+        onFatal: (code) => {
+          // Fire-and-forget; startPow is async
+          void fallbackToPow(code);
+        },
       });
 
       if (turnstileWidget) {
@@ -113,16 +143,11 @@ export function renderLogin(app, api, navigate) {
         await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
         captchaMode = 'turnstile';
 
-        // Background: if 600* exhausts rebuilds with no token, switch to PoW.
-        (async () => {
-          const token = await turnstileWidget.waitForToken(12000);
-          if (!token && turnstileWidget?.hadFatalError() && captchaMode === 'turnstile') {
-            console.warn('[Turnstile] fatal after rebuilds, falling back to PoW');
-            try {
-              await startPow();
-            } catch (e) {
-              console.error('PoW fallback failed:', e);
-            }
+        // Safety net if onFatal was missed
+        void (async () => {
+          const token = await turnstileWidget.waitForToken(10000);
+          if (!token && captchaMode === 'turnstile') {
+            await fallbackToPow('wait-timeout');
           }
         })();
         return;
@@ -139,6 +164,24 @@ export function renderLogin(app, api, navigate) {
         powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证失败，请刷新重试</span>';
         powStatus.className = 'pow-status error';
       }
+    }
+  }
+
+  async function probeTurnstileHost() {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 4000);
+      // api.js is CORS-friendly enough for a no-cors/opaque fetch; we only care that it is reachable.
+      await fetch('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit', {
+        method: 'GET',
+        mode: 'no-cors',
+        cache: 'no-store',
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -177,7 +220,6 @@ export function renderLogin(app, api, navigate) {
     let turnstileToken = null;
     if (captchaMode === 'turnstile') {
       if (turnstileWidget?.hadFatalError()) {
-        // Widget died mid-session — switch to PoW then ask user to submit again
         try {
           await startPow();
         } catch {
@@ -191,7 +233,13 @@ export function renderLogin(app, api, navigate) {
         turnstileToken = await turnstileWidget.waitForToken(8000);
       }
       if (!turnstileToken) {
-        showError('请完成人机验证');
+        // Last resort: switch to PoW instead of trapping the user
+        try {
+          await fallbackToPow('submit-no-token');
+          showError('人机验证已切换，请再次点击登录');
+        } catch {
+          showError('请完成人机验证');
+        }
         return;
       }
     }

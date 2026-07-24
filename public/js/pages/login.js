@@ -71,15 +71,37 @@ export function renderLogin(app, api, navigate) {
     }
   }
 
+  async function startPow() {
+    destroyTurnstile();
+    turnstileContainer.style.display = 'none';
+    powStatus.style.display = 'flex';
+    powStatus.innerHTML = '<div class="pow-spinner"></div><span>验证环境安全...</span>';
+    powStatus.className = 'pow-status';
+
+    // Always issue a fresh challenge so PoW is authorized server-side
+    challengeReady = refreshChallenge();
+    await challengeReady;
+    if (!challengeId) {
+      powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证初始化失败，请刷新重试</span>';
+      powStatus.className = 'pow-status error';
+      return;
+    }
+
+    const result = await api.post('/challenge/report', { challengeId, turnstileLoaded: false });
+    powNonce = await solvePoW(result.challenge, result.difficulty);
+    captchaMode = 'pow';
+    powStatus.innerHTML = '<span class="pow-icon">✓</span><span>环境验证通过</span>';
+    powStatus.className = 'pow-status success';
+  }
+
   async function initCaptcha() {
     captchaMode = 'pending';
     powNonce = null;
     destroyTurnstile();
+    turnstileContainer.style.display = '';
+    powStatus.style.display = 'none';
 
     try {
-      turnstileContainer.style.display = '';
-      powStatus.style.display = 'none';
-
       turnstileWidget = await mountTurnstile(turnstileContainer, {
         sitekey: turnstileSiteKey,
         theme: 'dark',
@@ -90,55 +112,51 @@ export function renderLogin(app, api, navigate) {
         if (!challengeId) throw new Error('no challengeId');
         await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
         captchaMode = 'turnstile';
+
+        // Background: if 600* exhausts rebuilds with no token, switch to PoW.
+        (async () => {
+          const token = await turnstileWidget.waitForToken(12000);
+          if (!token && turnstileWidget?.hadFatalError() && captchaMode === 'turnstile') {
+            console.warn('[Turnstile] fatal after rebuilds, falling back to PoW');
+            try {
+              await startPow();
+            } catch (e) {
+              console.error('PoW fallback failed:', e);
+            }
+          }
+        })();
         return;
       }
 
-      // Turnstile unavailable → PoW
-      turnstileContainer.style.display = 'none';
-      powStatus.style.display = 'flex';
-      powStatus.innerHTML = '<div class="pow-spinner"></div><span>验证环境安全...</span>';
-      powStatus.className = 'pow-status';
-
-      await challengeReady;
-      if (!challengeId) {
-        powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证初始化失败，请刷新重试</span>';
-        powStatus.className = 'pow-status error';
-        return;
-      }
-
-      const result = await api.post('/challenge/report', { challengeId, turnstileLoaded: false });
-      powNonce = await solvePoW(result.challenge, result.difficulty);
-      captchaMode = 'pow';
-      powStatus.innerHTML = '<span class="pow-icon">✓</span><span>环境验证通过</span>';
-      powStatus.className = 'pow-status success';
+      await startPow();
     } catch (err) {
       console.error('Captcha init failed:', err);
-      powStatus.style.display = 'flex';
-      powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证失败，请刷新重试</span>';
-      powStatus.className = 'pow-status error';
+      try {
+        await startPow();
+      } catch (powErr) {
+        console.error('PoW fallback failed:', powErr);
+        powStatus.style.display = 'flex';
+        powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证失败，请刷新重试</span>';
+        powStatus.className = 'pow-status error';
+      }
     }
   }
 
   async function resetCaptchaAfterFailure() {
-    challengeReady = refreshChallenge();
-    if (captchaMode === 'turnstile' && turnstileWidget) {
+    if (captchaMode === 'turnstile' && turnstileWidget && !turnstileWidget.hadFatalError()) {
+      challengeReady = refreshChallenge();
       try {
         turnstileWidget.reset();
-      } catch {
-        await initCaptcha();
-        return;
-      }
-      await challengeReady;
-      if (challengeId) {
-        try {
+        await challengeReady;
+        if (challengeId) {
           await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
-        } catch (e) {
-          console.error('Challenge re-report failed:', e);
         }
+        return;
+      } catch (e) {
+        console.error('Challenge re-report failed:', e);
       }
-    } else {
-      await initCaptcha();
     }
+    await initCaptcha();
   }
 
   const form = document.getElementById('login-form');
@@ -158,9 +176,18 @@ export function renderLogin(app, api, navigate) {
 
     let turnstileToken = null;
     if (captchaMode === 'turnstile') {
+      if (turnstileWidget?.hadFatalError()) {
+        // Widget died mid-session — switch to PoW then ask user to submit again
+        try {
+          await startPow();
+        } catch {
+          /* ignore */
+        }
+        showError('人机验证已切换，请再次点击登录');
+        return;
+      }
       turnstileToken = turnstileWidget?.getToken() || null;
       if (!turnstileToken && turnstileWidget) {
-        // Widget may still be auto-retrying after a 600010 race — give it a moment
         turnstileToken = await turnstileWidget.waitForToken(8000);
       }
       if (!turnstileToken) {

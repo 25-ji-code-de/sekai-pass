@@ -20,7 +20,7 @@ import { getCookie, setCookie } from "hono/cookie";
 import { initializeLucia } from "./auth";
 import { hashPassword, verifyPassword, generateId } from "./password";
 import { decryptPassword, validateRequest } from "./decrypt";
-import { verifyTurnstile } from "./turnstile";
+import { verifyTurnstileDetailed } from "./turnstile";
 import { createChallengeState, generatePoWChallenge, verifyPoWHash, type ChallengeState } from "./pow";
 import { validateScopeParameter, formatScopes } from "./scope";
 
@@ -221,10 +221,19 @@ apiRouter.get("/oauth/config", async (c) => {
   });
 });
 
+/** Prefer CF-Connecting-IP; if only XFF exists, take the first hop (client). */
+function clientIp(c: { req: { header: (name: string) => string | undefined } }): string {
+  const cf = c.req.header("CF-Connecting-IP");
+  if (cf) return cf.trim();
+  const xff = c.req.header("X-Forwarded-For");
+  if (xff) return xff.split(",")[0].trim() || "unknown";
+  return "unknown";
+}
+
 // Challenge init — issue a session challenge
 apiRouter.get("/challenge/init", async (c) => {
   const challengeId = crypto.randomUUID();
-  const ip = c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For") || "unknown";
+  const ip = clientIp(c);
   const state = createChallengeState(ip);
   await c.env.KV.put(`challenge:${challengeId}`, JSON.stringify(state), { expirationTtl: 300 });
   return c.json({ challengeId });
@@ -239,7 +248,7 @@ apiRouter.post("/challenge/report", async (c) => {
   const state: ChallengeState = JSON.parse(raw);
   if (state.used) return c.json({ error: "验证会话已使用" }, 403);
 
-  const ip = c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For") || "unknown";
+  const ip = clientIp(c);
   if (state.ip !== ip && state.ip !== "unknown") return c.json({ error: "验证会话 IP 不匹配" }, 403);
 
   if (turnstileLoaded) {
@@ -278,8 +287,12 @@ async function verifyCaptcha(
   if (type === 'turnstile') {
     const token = body["cf-turnstile-response"];
     if (!token) return "请完成人机验证";
-    const valid = await verifyTurnstile(token, secretKey, remoteIp);
-    if (!valid) return "人机验证失败，请重试";
+    // remoteIp is intentionally not forwarded to siteverify (see turnstile.ts)
+    const result = await verifyTurnstileDetailed(token, secretKey);
+    if (!result.success) {
+      console.error('Turnstile reject for challenge', challengeId, result.errorCodes, 'ip=', remoteIp);
+      return "人机验证失败，请重试";
+    }
   } else if (type === 'pow') {
     if (!state.powIssued) return "未授权的验证方式";
     const nonce = body.powNonce;
@@ -332,8 +345,7 @@ apiRouter.post("/auth/login", async (c) => {
     }
 
     // Verify captcha (Turnstile or PoW fallback)
-    const remoteIp = c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For");
-    const captchaError = await verifyCaptcha(body, c.env.KV, c.env.TURNSTILE_SECRET_KEY, remoteIp);
+    const captchaError = await verifyCaptcha(body, c.env.KV, c.env.TURNSTILE_SECRET_KEY, clientIp(c));
     if (captchaError) {
       return c.json({ error: captchaError }, 400);
     }
@@ -397,8 +409,7 @@ apiRouter.post("/auth/register", async (c) => {
     }
 
     // Verify captcha (Turnstile or PoW fallback)
-    const remoteIp = c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For");
-    const captchaError = await verifyCaptcha(body, c.env.KV, c.env.TURNSTILE_SECRET_KEY, remoteIp);
+    const captchaError = await verifyCaptcha(body, c.env.KV, c.env.TURNSTILE_SECRET_KEY, clientIp(c));
     if (captchaError) {
       return c.json({ error: captchaError }, 400);
     }

@@ -8,6 +8,8 @@ export function renderRegister(app, api, navigate) {
   let captchaMode = 'pending';
   let challengeId = null;
   let powNonce = null;
+  let turnstileToken = null;
+  let turnstileWidgetId = null;
 
   app.innerHTML = `
     <div class="container">
@@ -60,23 +62,46 @@ export function renderRegister(app, api, navigate) {
   const turnstileWidget = document.getElementById('turnstile-widget');
   const powStatus = document.getElementById('pow-status');
 
-  // Fetch challenge ID in parallel
-  const challengeReady = api.get('/challenge/init').then(r => {
-    challengeId = r.challengeId;
-  }).catch(err => console.error('Challenge init failed:', err));
-
-  // Sequential captcha init: try Turnstile first, fall back to PoW
+  let challengeReady = refreshChallenge();
   initCaptcha();
 
+  function refreshChallenge() {
+    challengeId = null;
+    return api.get('/challenge/init').then(r => {
+      challengeId = r.challengeId;
+      return challengeId;
+    }).catch(err => {
+      console.error('Challenge init failed:', err);
+      return null;
+    });
+  }
+
   async function initCaptcha() {
+    captchaMode = 'pending';
+    turnstileToken = null;
+    powNonce = null;
+
     try {
-      const available = await waitForTurnstile(5000);
+      const available = await waitForTurnstile(8000);
 
       if (available) {
         try {
-          const widgetId = window.turnstile.render(turnstileWidget, {
+          turnstileWidget.innerHTML = '';
+          turnstileWidget.style.display = '';
+          powStatus.style.display = 'none';
+
+          turnstileWidgetId = window.turnstile.render(turnstileWidget, {
             sitekey: turnstileSiteKey,
             theme: 'dark',
+            callback: (token) => {
+              turnstileToken = token;
+            },
+            'expired-callback': () => {
+              turnstileToken = null;
+            },
+            'error-callback': () => {
+              turnstileToken = null;
+            },
           });
           await challengeReady;
           if (!challengeId) throw new Error('no challengeId');
@@ -119,21 +144,56 @@ export function renderRegister(app, api, navigate) {
       if (window.turnstile) return resolve(true);
 
       if (!document.querySelector('script[src*="turnstile"]')) {
+        const callbackName = 'onTurnstileLoad_' + Date.now();
+        let settled = false;
+        const settle = (ok) => {
+          if (settled) return;
+          settled = true;
+          delete window[callbackName];
+          resolve(ok);
+        };
+        window[callbackName] = () => settle(true);
         const script = document.createElement('script');
-        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        script.src = `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=${callbackName}`;
         script.async = true;
+        script.onerror = () => settle(false);
         document.head.appendChild(script);
+        setTimeout(() => settle(!!window.turnstile), timeout);
+        return;
       }
 
-      const timer = setTimeout(() => { clearInterval(check); resolve(false); }, timeout);
+      const timer = setTimeout(() => { clearInterval(check); resolve(!!window.turnstile); }, timeout);
       const check = setInterval(() => {
         if (window.turnstile) {
           clearTimeout(timer);
           clearInterval(check);
           resolve(true);
         }
-      }, 100);
+      }, 50);
     });
+  }
+
+  async function resetCaptchaAfterFailure() {
+    turnstileToken = null;
+    challengeReady = refreshChallenge();
+    if (captchaMode === 'turnstile' && window.turnstile && turnstileWidgetId != null) {
+      try {
+        window.turnstile.reset(turnstileWidgetId);
+      } catch {
+        await initCaptcha();
+        return;
+      }
+      await challengeReady;
+      if (challengeId) {
+        try {
+          await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
+        } catch (e) {
+          console.error('Challenge re-report failed:', e);
+        }
+      }
+    } else {
+      await initCaptcha();
+    }
   }
 
   // Handle form submission
@@ -155,8 +215,11 @@ export function renderRegister(app, api, navigate) {
     }
 
     if (captchaMode === 'turnstile') {
-      const turnstileResponse = document.querySelector('input[name="cf-turnstile-response"]');
-      if (!turnstileResponse || !turnstileResponse.value) {
+      if (!turnstileToken) {
+        const hidden = document.querySelector('#turnstile-widget input[name="cf-turnstile-response"]');
+        turnstileToken = hidden?.value || null;
+      }
+      if (!turnstileToken) {
         showError('请完成人机验证');
         return;
       }
@@ -193,7 +256,7 @@ export function renderRegister(app, api, navigate) {
       };
 
       if (captchaMode === 'turnstile') {
-        payload['cf-turnstile-response'] = document.querySelector('input[name="cf-turnstile-response"]').value;
+        payload['cf-turnstile-response'] = turnstileToken;
       } else {
         payload.powNonce = powNonce;
       }
@@ -208,9 +271,7 @@ export function renderRegister(app, api, navigate) {
       }
     } catch (error) {
       showError(error.message || '注册失败，请重试');
-      if (captchaMode === 'turnstile' && window.turnstile) {
-        window.turnstile.reset();
-      }
+      await resetCaptchaAfterFailure();
     } finally {
       setLoading(registerBtn, false);
     }

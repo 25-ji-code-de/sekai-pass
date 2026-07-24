@@ -15,29 +15,39 @@
  */
 
 
+export type TurnstileVerifyResult = {
+  success: boolean;
+  errorCodes?: string[];
+};
+
 /**
- * Verify Cloudflare Turnstile token
- * @param token The cf-turnstile-response token from the form
- * @param secretKey The Turnstile secret key
- * @param remoteIp Optional remote IP address
- * @returns Promise<boolean> True if verification succeeds
+ * Verify Cloudflare Turnstile token via siteverify.
+ *
+ * Intentionally does NOT send `remoteip`: dual-stack (IPv4 vs IPv6) and
+ * multi-value X-Forwarded-For mismatches are a common cause of
+ * "first attempt fails, refresh works" for otherwise-valid tokens.
  */
 export async function verifyTurnstile(
   token: string,
   secretKey: string,
-  remoteIp?: string
+  _remoteIp?: string
 ): Promise<boolean> {
+  const result = await verifyTurnstileDetailed(token, secretKey);
+  return result.success;
+}
+
+export async function verifyTurnstileDetailed(
+  token: string,
+  secretKey: string
+): Promise<TurnstileVerifyResult> {
   if (!token || !secretKey) {
-    return false;
+    return { success: false, errorCodes: ['missing-input'] };
   }
 
   try {
     const formData = new FormData();
     formData.append('secret', secretKey);
     formData.append('response', token);
-    if (remoteIp) {
-      formData.append('remoteip', remoteIp);
-    }
 
     const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
@@ -51,9 +61,13 @@ export async function verifyTurnstile(
       hostname?: string;
     };
 
-    return data.success;
+    if (!data.success) {
+      console.error('Turnstile siteverify failed:', data['error-codes'] || [], 'hostname=', data.hostname);
+    }
+
+    return { success: data.success, errorCodes: data['error-codes'] };
   } catch (error) {
     console.error('Turnstile verification error:', error);
-    return false;
+    return { success: false, errorCodes: ['internal-error'] };
   }
 }

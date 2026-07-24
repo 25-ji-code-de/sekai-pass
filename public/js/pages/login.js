@@ -8,6 +8,8 @@ export function renderLogin(app, api, navigate) {
   let captchaMode = 'pending';
   let challengeId = null;
   let powNonce = null;
+  let turnstileToken = null;
+  let turnstileWidgetId = null;
 
   app.innerHTML = `
     <div class="container">
@@ -44,32 +46,59 @@ export function renderLogin(app, api, navigate) {
   const powStatus = document.getElementById('pow-status');
 
   // Fetch challenge ID in parallel
-  const challengeReady = api.get('/challenge/init').then(r => {
-    challengeId = r.challengeId;
-  }).catch(err => console.error('Challenge init failed:', err));
+  let challengeReady = refreshChallenge();
 
   // Sequential captcha init: try Turnstile first, fall back to PoW
   initCaptcha();
 
+  function refreshChallenge() {
+    challengeId = null;
+    return api.get('/challenge/init').then(r => {
+      challengeId = r.challengeId;
+      return challengeId;
+    }).catch(err => {
+      console.error('Challenge init failed:', err);
+      return null;
+    });
+  }
+
   async function initCaptcha() {
+    captchaMode = 'pending';
+    turnstileToken = null;
+    powNonce = null;
+
     try {
-      // Wait up to 5s for Turnstile script to be available
-      const available = await waitForTurnstile(5000);
+      // Wait up to 8s for Turnstile script (cold cache can be slow)
+      const available = await waitForTurnstile(8000);
 
       if (available) {
         try {
-          const widgetId = window.turnstile.render(turnstileWidget, {
+          // Clear previous widget if re-init
+          turnstileWidget.innerHTML = '';
+          turnstileWidget.style.display = '';
+          powStatus.style.display = 'none';
+
+          turnstileWidgetId = window.turnstile.render(turnstileWidget, {
             sitekey: turnstileSiteKey,
             theme: 'dark',
+            // Explicit callbacks: only treat captcha as ready after token arrives
+            callback: (token) => {
+              turnstileToken = token;
+            },
+            'expired-callback': () => {
+              turnstileToken = null;
+            },
+            'error-callback': () => {
+              turnstileToken = null;
+            },
           });
-          // render() succeeded — use Turnstile
+
           await challengeReady;
           if (!challengeId) throw new Error('no challengeId');
           await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
           captchaMode = 'turnstile';
           return;
         } catch (e) {
-          // render failed, fall through to PoW
           console.error('Turnstile render failed:', e);
         }
       }
@@ -106,21 +135,58 @@ export function renderLogin(app, api, navigate) {
 
       // Load script if not present
       if (!document.querySelector('script[src*="turnstile"]')) {
+        const callbackName = 'onTurnstileLoad_' + Date.now();
+        let settled = false;
+        const settle = (ok) => {
+          if (settled) return;
+          settled = true;
+          delete window[callbackName];
+          resolve(ok);
+        };
+        window[callbackName] = () => settle(true);
         const script = document.createElement('script');
-        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        script.src = `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=${callbackName}`;
         script.async = true;
+        script.onerror = () => settle(false);
         document.head.appendChild(script);
+        setTimeout(() => settle(!!window.turnstile), timeout);
+        return;
       }
 
-      const timer = setTimeout(() => { clearInterval(check); resolve(false); }, timeout);
+      // Script is already loading (e.g. from index.html preload), poll as fallback
+      const timer = setTimeout(() => { clearInterval(check); resolve(!!window.turnstile); }, timeout);
       const check = setInterval(() => {
         if (window.turnstile) {
           clearTimeout(timer);
           clearInterval(check);
           resolve(true);
         }
-      }, 100);
+      }, 50);
     });
+  }
+
+  async function resetCaptchaAfterFailure() {
+    turnstileToken = null;
+    // New challenge session so a failed siteverify does not leave stale state
+    challengeReady = refreshChallenge();
+    if (captchaMode === 'turnstile' && window.turnstile && turnstileWidgetId != null) {
+      try {
+        window.turnstile.reset(turnstileWidgetId);
+      } catch {
+        await initCaptcha();
+        return;
+      }
+      await challengeReady;
+      if (challengeId) {
+        try {
+          await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
+        } catch (e) {
+          console.error('Challenge re-report failed:', e);
+        }
+      }
+    } else {
+      await initCaptcha();
+    }
   }
 
   // Handle form submission
@@ -139,9 +205,13 @@ export function renderLogin(app, api, navigate) {
       return;
     }
 
+    // Prefer callback token; fall back to hidden input Turnstile injects
     if (captchaMode === 'turnstile') {
-      const turnstileResponse = document.querySelector('input[name="cf-turnstile-response"]');
-      if (!turnstileResponse || !turnstileResponse.value) {
+      if (!turnstileToken) {
+        const hidden = document.querySelector('#turnstile-widget input[name="cf-turnstile-response"]');
+        turnstileToken = hidden?.value || null;
+      }
+      if (!turnstileToken) {
         showError('请完成人机验证');
         return;
       }
@@ -171,7 +241,7 @@ export function renderLogin(app, api, navigate) {
       };
 
       if (captchaMode === 'turnstile') {
-        payload['cf-turnstile-response'] = document.querySelector('input[name="cf-turnstile-response"]').value;
+        payload['cf-turnstile-response'] = turnstileToken;
       } else {
         payload.powNonce = powNonce;
       }
@@ -186,9 +256,8 @@ export function renderLogin(app, api, navigate) {
       }
     } catch (error) {
       showError(error.message || '登录失败，请重试');
-      if (captchaMode === 'turnstile' && window.turnstile) {
-        window.turnstile.reset();
-      }
+      // Always refresh captcha + challenge after any failure (token is single-use)
+      await resetCaptchaAfterFailure();
     } finally {
       setLoading(loginBtn, false);
     }

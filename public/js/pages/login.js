@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { encryptPassword, generateNonce, getFingerprint, showError, hideMessages, setLoading } from '../utils.js';
 import { solvePoW } from '../pow-solver.js';
+import { mountTurnstile } from '../turnstile-helper.js';
 
 export function renderLogin(app, api, navigate) {
   const turnstileSiteKey = window.TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
@@ -8,8 +9,8 @@ export function renderLogin(app, api, navigate) {
   let captchaMode = 'pending';
   let challengeId = null;
   let powNonce = null;
-  let turnstileToken = null;
-  let turnstileWidgetId = null;
+  /** @type {null | Awaited<ReturnType<typeof mountTurnstile>>} */
+  let turnstileWidget = null;
 
   app.innerHTML = `
     <div class="container">
@@ -42,13 +43,10 @@ export function renderLogin(app, api, navigate) {
     </footer>
   `;
 
-  const turnstileWidget = document.getElementById('turnstile-widget');
+  const turnstileContainer = document.getElementById('turnstile-widget');
   const powStatus = document.getElementById('pow-status');
 
-  // Fetch challenge ID in parallel
   let challengeReady = refreshChallenge();
-
-  // Sequential captcha init: try Turnstile first, fall back to PoW
   initCaptcha();
 
   function refreshChallenge() {
@@ -62,49 +60,41 @@ export function renderLogin(app, api, navigate) {
     });
   }
 
+  function destroyTurnstile() {
+    if (turnstileWidget) {
+      try {
+        turnstileWidget.remove();
+      } catch {
+        /* ignore */
+      }
+      turnstileWidget = null;
+    }
+  }
+
   async function initCaptcha() {
     captchaMode = 'pending';
-    turnstileToken = null;
     powNonce = null;
+    destroyTurnstile();
 
     try {
-      // Wait up to 8s for Turnstile script (cold cache can be slow)
-      const available = await waitForTurnstile(8000);
+      turnstileContainer.style.display = '';
+      powStatus.style.display = 'none';
 
-      if (available) {
-        try {
-          // Clear previous widget if re-init
-          turnstileWidget.innerHTML = '';
-          turnstileWidget.style.display = '';
-          powStatus.style.display = 'none';
+      turnstileWidget = await mountTurnstile(turnstileContainer, {
+        sitekey: turnstileSiteKey,
+        theme: 'dark',
+      });
 
-          turnstileWidgetId = window.turnstile.render(turnstileWidget, {
-            sitekey: turnstileSiteKey,
-            theme: 'dark',
-            // Explicit callbacks: only treat captcha as ready after token arrives
-            callback: (token) => {
-              turnstileToken = token;
-            },
-            'expired-callback': () => {
-              turnstileToken = null;
-            },
-            'error-callback': () => {
-              turnstileToken = null;
-            },
-          });
-
-          await challengeReady;
-          if (!challengeId) throw new Error('no challengeId');
-          await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
-          captchaMode = 'turnstile';
-          return;
-        } catch (e) {
-          console.error('Turnstile render failed:', e);
-        }
+      if (turnstileWidget) {
+        await challengeReady;
+        if (!challengeId) throw new Error('no challengeId');
+        await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
+        captchaMode = 'turnstile';
+        return;
       }
 
-      // Turnstile unavailable or render failed → PoW
-      turnstileWidget.style.display = 'none';
+      // Turnstile unavailable → PoW
+      turnstileContainer.style.display = 'none';
       powStatus.style.display = 'flex';
       powStatus.innerHTML = '<div class="pow-spinner"></div><span>验证环境安全...</span>';
       powStatus.className = 'pow-status';
@@ -129,49 +119,11 @@ export function renderLogin(app, api, navigate) {
     }
   }
 
-  function waitForTurnstile(timeout) {
-    return new Promise(resolve => {
-      if (window.turnstile) return resolve(true);
-
-      // Load script if not present
-      if (!document.querySelector('script[src*="turnstile"]')) {
-        const callbackName = 'onTurnstileLoad_' + Date.now();
-        let settled = false;
-        const settle = (ok) => {
-          if (settled) return;
-          settled = true;
-          delete window[callbackName];
-          resolve(ok);
-        };
-        window[callbackName] = () => settle(true);
-        const script = document.createElement('script');
-        script.src = `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=${callbackName}`;
-        script.async = true;
-        script.onerror = () => settle(false);
-        document.head.appendChild(script);
-        setTimeout(() => settle(!!window.turnstile), timeout);
-        return;
-      }
-
-      // Script is already loading (e.g. from index.html preload), poll as fallback
-      const timer = setTimeout(() => { clearInterval(check); resolve(!!window.turnstile); }, timeout);
-      const check = setInterval(() => {
-        if (window.turnstile) {
-          clearTimeout(timer);
-          clearInterval(check);
-          resolve(true);
-        }
-      }, 50);
-    });
-  }
-
   async function resetCaptchaAfterFailure() {
-    turnstileToken = null;
-    // New challenge session so a failed siteverify does not leave stale state
     challengeReady = refreshChallenge();
-    if (captchaMode === 'turnstile' && window.turnstile && turnstileWidgetId != null) {
+    if (captchaMode === 'turnstile' && turnstileWidget) {
       try {
-        window.turnstile.reset(turnstileWidgetId);
+        turnstileWidget.reset();
       } catch {
         await initCaptcha();
         return;
@@ -189,7 +141,6 @@ export function renderLogin(app, api, navigate) {
     }
   }
 
-  // Handle form submission
   const form = document.getElementById('login-form');
   const loginBtn = document.getElementById('login-btn');
 
@@ -205,11 +156,12 @@ export function renderLogin(app, api, navigate) {
       return;
     }
 
-    // Prefer callback token; fall back to hidden input Turnstile injects
+    let turnstileToken = null;
     if (captchaMode === 'turnstile') {
-      if (!turnstileToken) {
-        const hidden = document.querySelector('#turnstile-widget input[name="cf-turnstile-response"]');
-        turnstileToken = hidden?.value || null;
+      turnstileToken = turnstileWidget?.getToken() || null;
+      if (!turnstileToken && turnstileWidget) {
+        // Widget may still be auto-retrying after a 600010 race — give it a moment
+        turnstileToken = await turnstileWidget.waitForToken(8000);
       }
       if (!turnstileToken) {
         showError('请完成人机验证');
@@ -251,12 +203,12 @@ export function renderLogin(app, api, navigate) {
       if (response.token) {
         localStorage.setItem('token', response.token);
         api.setAuthToken(response.token);
+        destroyTurnstile();
         const params = new URLSearchParams(window.location.search);
         navigate(params.get('redirect') || '/');
       }
     } catch (error) {
       showError(error.message || '登录失败，请重试');
-      // Always refresh captcha + challenge after any failure (token is single-use)
       await resetCaptchaAfterFailure();
     } finally {
       setLoading(loginBtn, false);
@@ -266,6 +218,7 @@ export function renderLogin(app, api, navigate) {
   app.querySelectorAll('a[data-link]').forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
+      destroyTurnstile();
       navigate(e.target.getAttribute('href'));
     });
   });

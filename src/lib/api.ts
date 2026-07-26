@@ -21,7 +21,7 @@ import { initializeLucia } from "./auth";
 import { hashPassword, verifyPassword, generateId } from "./password";
 import { decryptPassword, validateRequest } from "./decrypt";
 import { verifyTurnstileDetailed } from "./turnstile";
-import { createChallengeState, generatePoWChallenge, verifyPoWHash, type ChallengeState } from "./pow";
+import { createChallengeState, generatePoWChallenge, verifyPoWHash, POW_DIFFICULTY, POW_DIFFICULTY_STRICT, type ChallengeState } from "./pow";
 import { validateScopeParameter, formatScopes } from "./scope";
 
 type Bindings = {
@@ -29,6 +29,8 @@ type Bindings = {
   KV: KVNamespace;
   TURNSTILE_SECRET_KEY: string;
   TURNSTILE_SITE_KEY: string;
+  /** Comma-separated ISO country codes that get PoW up-front (default "CN"). */
+  POW_FAST_COUNTRIES?: string;
 };
 
 type Variables = {
@@ -230,13 +232,39 @@ function clientIp(c: { req: { header: (name: string) => string | undefined } }):
   return "unknown";
 }
 
-// Challenge init — issue a session challenge
+/**
+ * Regions where challenges.cloudflare.com is unreliable enough that PoW is
+ * issued up-front at baseline difficulty (mainland China primarily).
+ * Everywhere else PoW stays a rate-limited, more expensive distress fallback,
+ * so the effective bot barrier for the rest of the world remains Turnstile.
+ */
+function isPowFastRegion(c: { req: { raw: Request }; env: Bindings }): boolean {
+  const cf = (c.req.raw as Request & { cf?: { country?: string } }).cf;
+  const country = String(cf?.country || "").toUpperCase();
+  if (!country) return true; // local dev has no cf object
+  return (c.env.POW_FAST_COUNTRIES || "CN")
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .includes(country);
+}
+
+// Challenge init — issue a session challenge (with PoW attached in fast regions,
+// so racing clients can start solving without an extra round trip)
 apiRouter.get("/challenge/init", async (c) => {
   const challengeId = crypto.randomUUID();
   const ip = clientIp(c);
   const state = createChallengeState(ip);
+
+  let pow: { challenge: string; difficulty: number } | null = null;
+  if (isPowFastRegion(c)) {
+    pow = generatePoWChallenge();
+    state.powIssued = true;
+    state.powChallenge = pow.challenge;
+    state.powDifficulty = pow.difficulty;
+  }
+
   await c.env.KV.put(`challenge:${challengeId}`, JSON.stringify(state), { expirationTtl: 300 });
-  return c.json({ challengeId });
+  return c.json({ challengeId, pow });
 });
 
 // Challenge report — client reports Turnstile load status, server decides method
@@ -255,13 +283,33 @@ apiRouter.post("/challenge/report", async (c) => {
     state.turnstileAttempted = true;
     await c.env.KV.put(`challenge:${challengeId}`, JSON.stringify(state), { expirationTtl: 300 });
     return c.json({ method: 'turnstile' });
-  } else {
-    const pow = generatePoWChallenge();
-    state.powIssued = true;
-    state.powChallenge = pow.challenge;
-    await c.env.KV.put(`challenge:${challengeId}`, JSON.stringify(state), { expirationTtl: 300 });
-    return c.json({ method: 'pow', challenge: pow.challenge, difficulty: pow.difficulty });
   }
+
+  // Idempotent: fast regions already got their PoW at init — hand back the same one.
+  if (state.powIssued && state.powChallenge) {
+    return c.json({
+      method: 'pow',
+      challenge: state.powChallenge,
+      difficulty: state.powDifficulty ?? POW_DIFFICULTY,
+    });
+  }
+
+  const fast = isPowFastRegion(c);
+  if (!fast) {
+    // Distress fallback outside fast regions: cap grants per IP so PoW stays a
+    // lifeline for broken networks rather than the cheap path for bots.
+    const rlKey = `powgrant:${ip}`;
+    const granted = parseInt((await c.env.KV.get(rlKey)) || "0", 10);
+    if (granted >= 30) return c.json({ error: "请求过于频繁，请稍后再试" }, 429);
+    await c.env.KV.put(rlKey, String(granted + 1), { expirationTtl: 3600 });
+  }
+
+  const pow = generatePoWChallenge(fast ? POW_DIFFICULTY : POW_DIFFICULTY_STRICT);
+  state.powIssued = true;
+  state.powChallenge = pow.challenge;
+  state.powDifficulty = pow.difficulty;
+  await c.env.KV.put(`challenge:${challengeId}`, JSON.stringify(state), { expirationTtl: 300 });
+  return c.json({ method: 'pow', challenge: pow.challenge, difficulty: pow.difficulty });
 });
 
 // Verify captcha: stateful, checks KV challenge state
@@ -297,7 +345,7 @@ async function verifyCaptcha(
     if (!state.powIssued) return "未授权的验证方式";
     const nonce = body.powNonce;
     if (!nonce || !state.powChallenge) return "验证数据不完整";
-    const valid = await verifyPoWHash(state.powChallenge, nonce);
+    const valid = await verifyPoWHash(state.powChallenge, nonce, state.powDifficulty ?? POW_DIFFICULTY);
     if (!valid) return "人机验证失败，请重试";
   } else {
     return "请完成人机验证";

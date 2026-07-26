@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { encryptPassword, generateNonce, getFingerprint, showError, hideMessages, setLoading } from '../utils.js';
-import { solvePoW } from '../pow-solver.js';
-import { mountTurnstile } from '../turnstile-helper.js';
+import { createCaptcha } from '../captcha.js';
 
 export function renderLogin(app, api, navigate) {
   const turnstileSiteKey = window.TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
-
-  let captchaMode = 'pending';
-  let challengeId = null;
-  let powNonce = null;
-  /** @type {null | Awaited<ReturnType<typeof mountTurnstile>>} */
-  let turnstileWidget = null;
-  let powFallbackStarted = false;
 
   app.innerHTML = `
     <div class="container">
@@ -44,140 +36,12 @@ export function renderLogin(app, api, navigate) {
     </footer>
   `;
 
-  const turnstileContainer = document.getElementById('turnstile-widget');
-  const powStatus = document.getElementById('pow-status');
-
-  let challengeReady = refreshChallenge();
-  initCaptcha();
-
-  function refreshChallenge() {
-    challengeId = null;
-    return api.get('/challenge/init').then(r => {
-      challengeId = r.challengeId;
-      return challengeId;
-    }).catch(err => {
-      console.error('Challenge init failed:', err);
-      return null;
-    });
-  }
-
-  function destroyTurnstile() {
-    if (turnstileWidget) {
-      try {
-        turnstileWidget.remove();
-      } catch {
-        /* ignore */
-      }
-      turnstileWidget = null;
-    }
-  }
-
-  async function startPow() {
-    if (powFallbackStarted && captchaMode === 'pow') return;
-    powFallbackStarted = true;
-    destroyTurnstile();
-    turnstileContainer.style.display = 'none';
-    powStatus.style.display = 'flex';
-    powStatus.innerHTML = '<div class="pow-spinner"></div><span>验证环境安全...</span>';
-    powStatus.className = 'pow-status';
-
-    // Always issue a fresh challenge so PoW is authorized server-side
-    challengeReady = refreshChallenge();
-    await challengeReady;
-    if (!challengeId) {
-      powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证初始化失败，请刷新重试</span>';
-      powStatus.className = 'pow-status error';
-      captchaMode = 'pending';
-      return;
-    }
-
-    const result = await api.post('/challenge/report', { challengeId, turnstileLoaded: false });
-    powNonce = await solvePoW(result.challenge, result.difficulty);
-    captchaMode = 'pow';
-    powStatus.innerHTML = '<span class="pow-icon">✓</span><span>环境验证通过</span>';
-    powStatus.className = 'pow-status success';
-  }
-
-  async function fallbackToPow(reason) {
-    if (powFallbackStarted) return;
-    console.warn('[Turnstile] falling back to PoW:', reason);
-    try {
-      await startPow();
-    } catch (e) {
-      console.error('PoW fallback failed:', e);
-      powStatus.style.display = 'flex';
-      powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证失败，请刷新重试</span>';
-      powStatus.className = 'pow-status error';
-    }
-  }
-
-  async function initCaptcha() {
-    captchaMode = 'pending';
-    powNonce = null;
-    powFallbackStarted = false;
-    destroyTurnstile();
-    turnstileContainer.style.display = '';
-    powStatus.style.display = 'none';
-
-    try {
-      turnstileWidget = await mountTurnstile(turnstileContainer, {
-        sitekey: turnstileSiteKey,
-        theme: 'dark',
-        onFatal: (code) => {
-          // Fire-and-forget; startPow is async
-          void fallbackToPow(code);
-        },
-      });
-
-      if (turnstileWidget) {
-        await challengeReady;
-        if (!challengeId) throw new Error('no challengeId');
-        await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
-        captchaMode = 'turnstile';
-
-        // Safety net if onFatal was missed. Never fires while the widget is
-        // interactive — that means it is healthy and waiting on the user.
-        const widget = turnstileWidget;
-        void (async () => {
-          const token = await widget.waitForToken(45000);
-          if (!token && captchaMode === 'turnstile' && widget === turnstileWidget
-              && !widget.isInteractive()) {
-            await fallbackToPow('wait-timeout');
-          }
-        })();
-        return;
-      }
-
-      await startPow();
-    } catch (err) {
-      console.error('Captcha init failed:', err);
-      try {
-        await startPow();
-      } catch (powErr) {
-        console.error('PoW fallback failed:', powErr);
-        powStatus.style.display = 'flex';
-        powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证失败，请刷新重试</span>';
-        powStatus.className = 'pow-status error';
-      }
-    }
-  }
-
-  async function resetCaptchaAfterFailure() {
-    if (captchaMode === 'turnstile' && turnstileWidget && !turnstileWidget.hadFatalError()) {
-      challengeReady = refreshChallenge();
-      try {
-        turnstileWidget.reset();
-        await challengeReady;
-        if (challengeId) {
-          await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
-        }
-        return;
-      } catch (e) {
-        console.error('Challenge re-report failed:', e);
-      }
-    }
-    await initCaptcha();
-  }
+  const captcha = createCaptcha({
+    api,
+    sitekey: turnstileSiteKey,
+    widgetEl: document.getElementById('turnstile-widget'),
+    statusEl: document.getElementById('pow-status'),
+  });
 
   const form = document.getElementById('login-form');
   const loginBtn = document.getElementById('login-btn');
@@ -189,73 +53,33 @@ export function renderLogin(app, api, navigate) {
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
 
-    if (captchaMode === 'pending') {
-      showError('请等待人机验证完成');
-      return;
-    }
-
-    let turnstileToken = null;
-    if (captchaMode === 'turnstile') {
-      if (turnstileWidget?.hadFatalError()) {
-        try {
-          await startPow();
-        } catch {
-          /* ignore */
-        }
-        showError('人机验证已切换，请再次点击登录');
-        return;
-      }
-      turnstileToken = turnstileWidget?.getToken() || null;
-      if (!turnstileToken && turnstileWidget) {
-        if (turnstileWidget.isInteractive()) {
-          showError('请先完成上方的人机验证');
-          return;
-        }
-        turnstileToken = await turnstileWidget.waitForToken(8000);
-      }
-      if (!turnstileToken) {
-        if (turnstileWidget?.isInteractive()) {
-          showError('请先完成上方的人机验证');
-          return;
-        }
-        // Last resort: switch to PoW instead of trapping the user
-        try {
-          await fallbackToPow('submit-no-token');
-          showError('人机验证已切换，请再次点击登录');
-        } catch {
-          showError('请完成人机验证');
-        }
-        return;
-      }
-    }
-
-    if (captchaMode === 'pow' && !powNonce) {
-      showError('请等待人机验证完成');
-      return;
-    }
-
     setLoading(loginBtn, true);
-
     try {
-      const encryptedPassword = await encryptPassword(password);
-      const nonce = generateNonce();
-      const fingerprint = getFingerprint();
-      const timestamp = Date.now();
+      const proof = await captcha.getProof(8000);
+      if (!proof.ok) {
+        if (proof.reason === 'interactive') {
+          showError('请先完成上方的人机验证');
+        } else if (proof.reason === 'failed') {
+          showError('人机验证失败，请刷新页面重试');
+        } else {
+          showError('人机验证还在进行中，请稍候再试');
+        }
+        return;
+      }
 
       const payload = {
         username,
-        p: encryptedPassword,
-        nonce,
-        fp: fingerprint,
-        ts: timestamp,
-        challengeId,
-        captchaType: captchaMode,
+        p: await encryptPassword(password),
+        nonce: generateNonce(),
+        fp: getFingerprint(),
+        ts: Date.now(),
+        challengeId: proof.challengeId,
+        captchaType: proof.type,
       };
-
-      if (captchaMode === 'turnstile') {
-        payload['cf-turnstile-response'] = turnstileToken;
+      if (proof.type === 'turnstile') {
+        payload['cf-turnstile-response'] = proof.token;
       } else {
-        payload.powNonce = powNonce;
+        payload.powNonce = proof.nonce;
       }
 
       const response = await api.post('/auth/login', payload);
@@ -263,13 +87,13 @@ export function renderLogin(app, api, navigate) {
       if (response.token) {
         localStorage.setItem('token', response.token);
         api.setAuthToken(response.token);
-        destroyTurnstile();
+        captcha.destroy();
         const params = new URLSearchParams(window.location.search);
         navigate(params.get('redirect') || '/');
       }
     } catch (error) {
       showError(error.message || '登录失败，请重试');
-      await resetCaptchaAfterFailure();
+      await captcha.refreshAfterFailure();
     } finally {
       setLoading(loginBtn, false);
     }
@@ -278,7 +102,7 @@ export function renderLogin(app, api, navigate) {
   app.querySelectorAll('a[data-link]').forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
-      destroyTurnstile();
+      captcha.destroy();
       navigate(e.target.getAttribute('href'));
     });
   });

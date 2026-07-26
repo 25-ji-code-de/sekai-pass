@@ -95,6 +95,7 @@ function afterLayout() {
  *   sitekey: string,
  *   theme?: string,
  *   onToken?: (token: string) => void,
+ *   onError?: (code: string, count: number) => void,
  *   onFatal?: (code: string) => void,
  * }} opts
  * @returns {Promise<null | {
@@ -205,6 +206,11 @@ export async function mountTurnstile(container, opts) {
           const codeStr = String(code ?? '');
           console.warn('[Turnstile] widget error', codeStr);
           errorCount += 1;
+          try {
+            opts.onError?.(codeStr, errorCount);
+          } catch {
+            /* ignore */
+          }
 
           const family = codeStr.slice(0, 3);
           if (family === '110') {

@@ -20,7 +20,13 @@
  * Server controls when PoW is allowed via KV-stored challenge state
  */
 
-const POW_DIFFICULTY = 20; // ~1M hashes, ~1-2s with sync SHA-256
+/** Baseline difficulty: ~1M hashes, ~1-2s with sync SHA-256 in a Web Worker. */
+export const POW_DIFFICULTY = 20;
+/**
+ * Difficulty for regions where PoW is only a distress fallback (Turnstile is
+ * expected to work there): 4x the work, so the cheap path for bots stays shut.
+ */
+export const POW_DIFFICULTY_STRICT = 22;
 
 function randomHex(bytes: number): string {
   const arr = new Uint8Array(bytes);
@@ -55,6 +61,8 @@ export interface ChallengeState {
   turnstileAttempted: boolean;
   powIssued: boolean;
   powChallenge: string | null;
+  /** Absent on states written before difficulty tiers existed → baseline. */
+  powDifficulty?: number;
   used: boolean;
 }
 
@@ -69,11 +77,17 @@ export function createChallengeState(ip: string): ChallengeState {
   };
 }
 
-export function generatePoWChallenge(): { challenge: string; difficulty: number } {
-  return { challenge: randomHex(16), difficulty: POW_DIFFICULTY };
+export function generatePoWChallenge(
+  difficulty: number = POW_DIFFICULTY
+): { challenge: string; difficulty: number } {
+  return { challenge: randomHex(16), difficulty };
 }
 
-export async function verifyPoWHash(challenge: string, nonce: string): Promise<boolean> {
+export async function verifyPoWHash(
+  challenge: string,
+  nonce: string,
+  difficulty: number = POW_DIFFICULTY
+): Promise<boolean> {
   const hash = await sha256Hex(challenge + nonce);
-  return hasLeadingZeroBits(hash, POW_DIFFICULTY);
+  return hasLeadingZeroBits(hash, difficulty);
 }

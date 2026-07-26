@@ -37,6 +37,7 @@ type Bindings = {
   TURNSTILE_SECRET_KEY: string;
   TURNSTILE_SITE_KEY: string;
   KEY_ENCRYPTION_SECRET: string;
+  POW_FAST_COUNTRIES?: string;
   ASSETS: Fetcher;
 };
 

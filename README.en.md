@@ -46,6 +46,8 @@ Then, fill the `database_id` in the `wrangler.toml` with the `database_id` showe
 
 ### 3. Create Database Structure
 
+**For a fresh database:**
+
 ```bash
 # Development(Local)
 npx wrangler d1 execute sekai_pass_db --local --file=./schema.sql
@@ -53,6 +55,21 @@ npx wrangler d1 execute sekai_pass_db --local --file=./schema.sql
 # Production(Online)
 npx wrangler d1 execute sekai_pass_db --remote --file=./schema.sql
 ```
+
+**For a database that is already running:** the command above will not help you.
+`schema.sql` is entirely `CREATE TABLE IF NOT EXISTS`, so it adds **no columns**
+to tables that already exist — it succeeds quietly, and then you get 500s on the
+endpoints that use the new columns. To upgrade, run:
+
+```bash
+npm run migrate              # local database
+npm run migrate -- --remote  # production database
+```
+
+It reads `pragma_table_info` first and only adds the columns that are missing, so
+running it repeatedly — or resuming after an interrupted migration — is safe. When
+it finishes it also lists any pre-existing applications that have no owner (and are
+therefore invisible in the open platform), along with the SQL to claim them.
 
 ### 4. Configure KV Namespace for OIDC_KEYS storage
 

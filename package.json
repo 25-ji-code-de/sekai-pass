@@ -9,7 +9,8 @@
     "build": "wrangler deploy --dry-run",
     "type-check": "tsc --noEmit",
     "test": "node --test \"test/*.test.ts\"",
-    "sync-docs": "node scripts/sync-docs.js"
+    "sync-docs": "node scripts/sync-docs.js",
+    "migrate": "node scripts/migrate.mjs"
   },
   "keywords": [
     "sso",

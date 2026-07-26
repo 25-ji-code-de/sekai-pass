@@ -49,6 +49,8 @@ npx wrangler d1 create sekai_pass_db
 
 ### 3. 应用数据库架构
 
+**全新的库**：
+
 ```bash
 # 本地开发环境
 npx wrangler d1 execute sekai_pass_db --local --file=./schema.sql
@@ -56,6 +58,19 @@ npx wrangler d1 execute sekai_pass_db --local --file=./schema.sql
 # 生产环境
 npx wrangler d1 execute sekai_pass_db --remote --file=./schema.sql
 ```
+
+**已经在跑的库**：上面这条对你没用。`schema.sql` 通篇是
+`CREATE TABLE IF NOT EXISTS`，对已存在的表**一列都不会补** —— 它会安静地成功，
+然后你在用到新列的接口上收到 500。升级请走：
+
+```bash
+npm run migrate              # 本地库
+npm run migrate -- --remote  # 线上库
+```
+
+它会先读 `pragma_table_info` 看哪几列已经在了，只补缺的那几列；跑几遍、
+或者从上次中断的地方接着跑，结果都一样。跑完还会把「没有 owner、因而在
+开放平台里看不见」的存量应用列出来，并给出认领用的 SQL。
 
 ### 4. 配置 KV 命名空间（OIDC 密钥存储）
 

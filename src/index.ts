@@ -23,7 +23,7 @@ import { verifyPKCE, validateCodeChallenge, validateCodeVerifier } from "./lib/p
 import { issueTokens, validateAccessToken, refreshAccessToken, revokeRefreshToken, revokeAllUserTokens } from "./lib/tokens.ts";
 import { validateScopeParameter, formatScopes, filterUserData, SCOPES, hasScopes } from "./lib/scope.ts";
 import { isOIDCRequest } from "./lib/oidc-scope.ts";
-import { generateIDToken } from "./lib/id-token.ts";
+import { generateIDToken, EMAIL_VERIFIED } from "./lib/id-token.ts";
 import { generateOIDCMetadata } from "./lib/oidc-discovery.ts";
 import { getPublicKeys, checkAndRotateKeys } from "./lib/keys.ts";
 import { authenticateClient } from "./lib/client-auth.ts";
@@ -683,7 +683,9 @@ app.get("/oauth/userinfo", async (c) => {
 
   if (hasScopes(tokenInfo.scope, [SCOPES.EMAIL])) {
     userInfo.email = user.email;
-    userInfo.email_verified = true;  // Assuming verified
+    // 与 ID Token 用同一个常量 —— 两处发不一样的值会让接入方无所适从，
+    // 而且这种不一致没有任何东西会报错。理由见 EMAIL_VERIFIED 的注释。
+    userInfo.email_verified = EMAIL_VERIFIED;
   }
 
   // OAuth 2.1: Responses with sensitive data must include Cache-Control: no-store

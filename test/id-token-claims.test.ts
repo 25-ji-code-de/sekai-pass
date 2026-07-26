@@ -17,8 +17,12 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-import { buildIDTokenClaims } from '../src/lib/id-token.ts';
+import { buildIDTokenClaims, EMAIL_VERIFIED } from '../src/lib/id-token.ts';
+
+const root = join(import.meta.dirname, '..');
 import { isOIDCRequest, getClaimsForScope, validateOIDCScope } from '../src/lib/oidc-scope.ts';
 import { filterUserData } from '../src/lib/scope.ts';
 
@@ -95,6 +99,111 @@ describe('按 scope 披露用户字段', () => {
     for (const scope of ['openid', 'openid profile', 'applications']) {
       assert.ok(!('email' in build(scope)), scope);
     }
+  });
+
+  describe('email_verified 必须是 false', () => {
+    /*
+     * 本服务没有任何邮箱验证流程：注册只要求邮箱唯一，不发确认信，
+     * 库里也没有记录验证状态的字段。此前这里硬编码 `true`，
+     * 注释写着 `// Assuming verified`。
+     *
+     * OIDC Core §5.1 说这个 claim 为 True 当且仅当邮箱**已被验证**。
+     * 发 true 就是在断言一件我们从没做过的事 —— 而很多接入方按
+     * 「邮箱已验证」做账号关联，于是攻击者用受害者的邮箱在这里注册，
+     * 就能接管受害者在**那边**的账号。
+     *
+     * 要改成 true，先做验证流程，再改这里 —— 顺序不能反。
+     */
+
+    test('ID Token 里是 false', () => {
+      assert.equal(build('openid email').email_verified, false);
+    });
+
+    test('常量导出的就是 false', () => {
+      assert.equal(EMAIL_VERIFIED, false);
+    });
+
+    test('userinfo 与 ID Token 用同一个常量（不会各发各的）', () => {
+      // 两处发不一样的值，接入方无所适从，且没有任何东西会报错
+      const index = readFileSync(join(root, 'src/index.ts'), 'utf8');
+      assert.match(
+        index,
+        /userInfo\.email_verified = EMAIL_VERIFIED;/,
+        'userinfo 没有用 EMAIL_VERIFIED 常量',
+      );
+      assert.match(
+        index,
+        /import \{[^}]*EMAIL_VERIFIED[^}]*\} from "\.\/lib\/id-token\.ts"/,
+        'index.ts 没有从 id-token.ts 引入这个常量',
+      );
+    });
+
+    test('赋值处不再写死 true', () => {
+      /*
+       * 注意断言的是**赋值语句**，不是「文件里不出现某个字符串」——
+       * 解释「为什么改掉」的注释里当然会引用原来那句
+       * `= true; // Assuming verified`。我第一版就这么写，
+       * 结果被自己的注释绊倒了。
+       */
+      for (const f of ['src/index.ts', 'src/lib/id-token.ts']) {
+        const src = readFileSync(join(root, f), 'utf8');
+        for (const m of src.matchAll(/^[^\n/*]*email_verified\s*=\s*([^;]+);/gm)) {
+          assert.equal(
+            m[1].trim(),
+            'EMAIL_VERIFIED',
+            `${f} 里 email_verified 被赋成了 ${m[1].trim()}`,
+          );
+        }
+      }
+    });
+
+    test('文档里的示例响应与代码一致', () => {
+      /*
+       * 文档抄错没人会发现 —— 除非有东西盯着。这里盯的是：
+       * 示例 JSON 里的 email_verified 必须与代码发的值相同。
+       */
+      const DOCS = [
+        'README.md',
+        'README.en.md',
+        'docs/features/oidc/implementation.md',
+        'docs/features/oidc/README.md',
+      ];
+      for (const f of DOCS) {
+        const text = readFileSync(join(root, f), 'utf8');
+        for (const m of text.matchAll(/"email_verified":\s*(\w+)/g)) {
+          assert.equal(
+            m[1],
+            String(EMAIL_VERIFIED),
+            `${f} 的示例里写着 "email_verified": ${m[1]}，而代码发的是 ${EMAIL_VERIFIED}`,
+          );
+        }
+      }
+    });
+
+    test('两份 README 都说清了「别拿这个邮箱做账号关联」', () => {
+      // 光把值改成 false 不够 —— 接入方看到 false 也未必知道该怎么办
+      for (const [f, needle] of [
+        ['README.md', /不要用这里的 `email` 做账号关联/],
+        ['README.en.md', /Do not use this `email` for account linking/],
+      ] as const) {
+        assert.match(readFileSync(join(root, f), 'utf8'), needle, `${f} 缺少这条提醒`);
+      }
+    });
+
+    test('真的做了验证流程之后，这批测试要一起改', () => {
+      /*
+       * 这条是提醒：库里出现验证状态字段时，上面几条会挡路 ——
+       * 那时候该做的是把 EMAIL_VERIFIED 换成按用户读取，
+       * 而不是把这些断言删掉了事。
+       */
+      const schema = readFileSync(join(root, 'schema.sql'), 'utf8');
+      assert.doesNotMatch(
+        schema,
+        /email_verified|email_verified_at|email_confirmed/,
+        'schema 里出现了邮箱验证字段 —— 说明验证流程做了，' +
+          'EMAIL_VERIFIED 应当改成按用户读取，而不是继续写死 false',
+      );
+    });
   });
 
   test('绝不外泄 password_hash', () => {

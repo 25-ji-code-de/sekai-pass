@@ -170,7 +170,7 @@ code_verifier=VERIFIER
     "name": "Display Name",
     "preferred_username": "username",
     "email": "user@example.com",
-    "email_verified": true,
+    "email_verified": false,
     "acr": "urn:mace:incommon:iap:silver",
     "amr": ["pwd"]
   }
@@ -207,6 +207,20 @@ code_verifier=VERIFIER
 | `openid` | `sub`, `iss`, `aud`, `exp`, `iat`, `auth_time` |
 | `profile` | `name`, `preferred_username` |
 | `email` | `email`, `email_verified` |
+
+### `email_verified` 恒为 `false`
+
+**本服务没有邮箱验证流程。** 注册时只要求邮箱在库里唯一，不发确认信，
+也没有记录验证状态的字段 —— 也就是说，谁都可以拿别人的邮箱在这里注册。
+
+按 OIDC Core §5.1，`email_verified` 为 `true` 当且仅当该邮箱**已被验证**。
+既然我们没验过，就只能发 `false`。
+
+**接入方请注意：不要用这里的 `email` 做账号关联。** 「这个邮箱已经有账号了，
+帮你合并」这种流程如果信了未验证的邮箱，攻击者只要用受害者的邮箱在这里注册，
+就能接管受害者在**你那边**的账号。要按邮箱关联，请自己发确认信。
+
+（这个 claim 一度硬编码为 `true`，注释写着「Assuming verified」。已改。）
 
 ## 安全考虑
 

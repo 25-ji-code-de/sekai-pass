@@ -24,6 +24,28 @@ import { getCurrentSigningKey, getSigningKeyByKid } from "./keys.ts";
 import { getClaimsForScope } from "./oidc-scope.ts";
 import { SCOPES, hasScopes } from "./scope.ts";
 
+/**
+ * `email_verified` 的值。
+ *
+ * ── 为什么是 false ────────────────────────────────────────────────
+ *
+ * 本服务**没有任何邮箱验证流程**：注册时只要求邮箱在库里唯一，不发确认信，
+ * 库里也没有记录验证状态的字段。也就是说，谁都可以拿别人的邮箱注册。
+ *
+ * 这里此前硬编码 `true`，注释写的是 `// Assuming verified` —— 但 OIDC Core
+ * §5.1 对这个 claim 的定义是「True 当且仅当该邮箱**已被验证**」。发 `true`
+ * 就是在向依赖方断言一件我们从没做过的事。
+ *
+ * 后果不是抽象的：很多接入方按「邮箱已验证」做账号关联（「这个邮箱已经有
+ * 账号了，帮你合并」）。于是攻击者用受害者的邮箱在这里注册，去登录那个接入方，
+ * 就接管了受害者在**那边**的账号。开放平台上线后接入方不再只有我们自己，
+ * 这条尤其要紧。
+ *
+ * 改成 `false` 是**如实陈述**，不是降级。真要发 `true`，得先有验证流程 ——
+ * 那是产品决定，不是这个常量的事。
+ */
+export const EMAIL_VERIFIED = false;
+
 export interface IDTokenClaims {
   // Required claims
   iss: string;
@@ -86,7 +108,7 @@ export function buildIDTokenClaims(
 
   if (hasScopes(scope, [SCOPES.EMAIL])) {
     claims.email = user.email;
-    claims.email_verified = true; // Assuming verified
+    claims.email_verified = EMAIL_VERIFIED;
   }
 
   // Add authentication context

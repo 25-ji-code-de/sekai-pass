@@ -1,8 +1,7 @@
 # Dependencies
 node_modules/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
+# 注意：package-lock.json 必须提交 —— 本仓是要部署的应用而不是库，
+# 而且 actions/setup-node 的 cache: npm 没有 lockfile 会直接失败
 
 # Wrangler
 .wrangler/

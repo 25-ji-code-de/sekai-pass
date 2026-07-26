@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main, master]
+  # 不限定 base 分支 —— 栈式 PR（base 指向另一个特性分支）也应该跑 CI
   pull_request:
-    branches: [main, master]
 
 jobs:
   typecheck:
@@ -13,9 +13,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
       - name: Install
         run: npm ci || npm install
       - name: Typecheck
         run: npm run type-check
+      # Node 24 原生类型剥离，无需额外测试运行时
+      - name: Test
+        run: npm test

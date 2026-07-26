@@ -917,9 +917,19 @@ input[type="url"]:valid:not(:placeholder-shown) {
   justify-content: center;
 }
 
-.text-dimmed {
-  opacity: 0.6;
-}
+/*
+ * 这里原本还有一条 `.text-dimmed { opacity: 0.6 }`。
+ *
+ * 它是**死代码** —— 第 1088 行有第二个 .text-dimmed 定义，
+ * 权重相同、位置更靠后，实际生效的一直是那条 `color: var(--text-muted)`。
+ * CSS_REFACTOR_PLAN.md 列过 .btn-secondary / @keyframes spin / .avatar-preview
+ * 三处重复定义，漏了这一处。
+ *
+ * 删的是 opacity 那条而不是 color 那条：按设计系统，
+ * 「文字变淡」是**颜色**的事（fg-muted / fg-subtle），
+ * opacity 是留给失效**控件**的。而且 opacity 会叠乘 ——
+ * 撤销的公钥行本身就是 0.5，再套 0.6 会掉到 0.3。
+ */
 
 .text-highlight {
   color: var(--text-main);
@@ -1288,25 +1298,67 @@ input[type="url"]:valid:not(:placeholder-shown) {
  * 本节直接用 sekai-design 的 contract token（--sekai-*），不走上面那批
  * 旧别名 —— 设计系统的规则是组件样式只引用 contract 里的名字，不引用
  * 世界文件、不写裸 hex。新写的东西按新规矩来，存量的慢慢迁。
+ *
+ * 结构照搬设计系统的 .sekai-well / .sekai-well__row。它的注释点名说了
+ * 这个组件是给「彼此相关的一组行：OAuth scope、key/value 元数据、
+ * uri 列表」用的 —— 公钥列表正是这个，不该另发明一套。
+ *
+ * （本仓目前只 vendored 了 tokens/，没有 css/，所以这里是用同一套 token
+ *  复现同一套物理，而不是直接用它的类名。等哪天把 css/ 也接进来，
+ *  这几条就该整段删掉换成 .sekai-well。）
+ */
+
+/*
+ * 列表本身 = 面板上凿出来的井。
+ *
+ * 之前写反了：我把**每一行**做成了井（各自更暗 + 边框），
+ * 于是每行都在宣称自己是一口独立的坑。按设计系统的物理，
+ * 凹陷是相对所在层的 —— 一组彼此相关的行共处一口井，
+ * 井是容器，不是每一项。
  */
 .key-list {
   margin: var(--sekai-space-sm) 0 0;
   padding: 0;
   list-style: none;
-}
-
-.key-row {
-  padding: var(--sekai-space-md) var(--sekai-space-lg);
-  margin-bottom: var(--sekai-space-sm);
-  background: rgb(var(--sekai-surface-sunken));
+  background: linear-gradient(
+    180deg,
+    rgb(var(--sekai-surface-sunken) / 0.6) 0%,
+    rgb(var(--sekai-canvas) / 0.4) 100%
+  );
   border: var(--sekai-hairline);
-  border-radius: var(--sekai-radius-control);
+  border-radius: var(--sekai-radius-panel);
+  /* 井口内壁背光。不是投影 —— 它没离开平面，它是被凿进去的 */
+  box-shadow: var(--sekai-elev-inset);
+  overflow: hidden;
 }
 
-/* 撤销的公钥要一眼看出来是"还在但不生效" —— 保留但压暗。
-   不用 --sekai-fg-subtle 改字色，因为整行（含 badge、按钮）都要退后。 */
+/*
+ * 行与井底共面 → 只有边，没有影，也不另设填充。
+ * 分隔用极淡的一道线而不是整行换色：换色等于宣称高度差，而这里没有。
+ */
+.key-row {
+  padding: var(--sekai-space-lg);
+  border-bottom: 1px solid rgb(255 255 255 / 0.03);
+  transition: background var(--sekai-dur);
+}
+
+.key-row:last-child {
+  border-bottom: none;
+}
+
+.key-row:hover {
+  background: var(--sekai-tint-raised);
+}
+
+/*
+ * 撤销的公钥：记录还在，但它是惰性的。
+ *
+ * 与设计系统里 .sekai-btn:disabled 同一个处理（opacity 0.5）——
+ * 那条规则的物理是「失效的控件回到平面」：去掉抬起、整体压暗。
+ * 这一行本来就与井底共面，没有抬起可去，剩下的就是压暗。
+ */
 .key-row-revoked {
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .key-row-main {
@@ -1326,6 +1378,7 @@ input[type="url"]:valid:not(:placeholder-shown) {
   min-width: 0;
 }
 
+/* 颜色由并用的 .text-dimmed 给（= --sekai-fg-muted），这里只管排版 */
 .key-row-meta {
   margin-top: var(--sekai-space-2xs);
   font-size: var(--sekai-text-meta);

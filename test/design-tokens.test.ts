@@ -285,6 +285,83 @@ describe('新组件样式遵守设计系统', () => {
   test('Key ID 走 mono —— 设计系统里 mono 是"机器嗓音"', () => {
     assert.match(ruleBody('.key-row-main code'), /--sekai-font-mono/);
   });
+
+  /*
+   * 下面几条是 DESIGN_SYSTEM.md §0 那四条生成性原则的直接推论。
+   * 它们不是"看起来更好"，是"照那套物理只能这么写"。
+   */
+
+  test('列表是井，不是每一行各自是井', () => {
+    /*
+     * 设计系统的 .sekai-well 注释点名说了这个组件是给
+     * 「彼此相关的一组行：OAuth scope、key/value 元数据、uri 列表」用的。
+     *
+     * 第一版写反了：每一行各自更暗 + 边框，等于每行都在宣称自己是
+     * 一口独立的坑。凹陷是相对所在层的，一组相关的行共处一口井。
+     */
+    const list = ruleBody('.key-list');
+    assert.match(list, /--sekai-elev-inset/, '井口内壁背光是井的标志');
+    assert.match(list, /--sekai-surface-sunken/, '井底比所在面暗');
+
+    const row = ruleBody('.key-row');
+    assert.ok(!/background:/.test(row), '行与井底共面，不该另设填充');
+    assert.ok(!/border:/.test(row), '行与井底共面，不该整圈描边');
+  });
+
+  test('共面的东西不许有投影', () => {
+    // 「发丝线 = 物体的边，一直都在；阴影 = 它离开了所在平面」。
+    // 给共面的东西加投影，等于让它宣称一个它没有的高度。
+    for (const sel of ['.key-row', '.key-row-main', '.key-row-meta']) {
+      const body = ruleBody(sel);
+      const shadows = [...body.matchAll(/box-shadow:\s*([^;]+);/g)].map((m) => m[1]);
+      for (const s of shadows) {
+        assert.match(s, /inset|none/, `${sel} 有一个非 inset 的投影：${s}`);
+      }
+    }
+  });
+
+  test('撤销状态用 opacity —— 与 .sekai-btn:disabled 同一个处理', () => {
+    // 设计系统里失效控件的物理是「回到平面」：去掉抬起 + 整体压暗。
+    // 这一行本来就共面，没有抬起可去，剩下的就是压暗。
+    assert.match(ruleBody('.key-row-revoked'), /opacity:\s*0\.5\b/);
+  });
+});
+
+describe('没有重复定义的选择器', () => {
+  /*
+   * CSS_REFACTOR_PLAN.md 列过三处重复定义（.btn-secondary、
+   * @keyframes spin、.avatar-preview img），但它是人工数出来的，
+   * 漏了 .text-dimmed —— 那一处两个定义各说各的
+   * （一个 opacity: 0.6，一个 color），后者静默覆盖前者。
+   *
+   * 人工数一次只能管一次。这条测试管以后。
+   */
+  test('同一个选择器不在同一层级出现两次', () => {
+    // 只看顶层规则，跳过 @media / @supports 里的（那是有意的覆盖）
+    const topLevel = styles
+      .replace(/\/\*[\s\S]*?\*\//g, '') // 注释里会出现选择器名字
+      .replace(/@(?:media|supports|keyframes)[^{]*\{[\s\S]*?\n\}/g, '');
+
+    /*
+     * 分组选择器必须拆开逐个数。`.loading-text, .text-dimmed { }` 与
+     * 单独的 `.text-dimmed { }` 是**同一个选择器的两次定义**，
+     * 但整串当键比就成了两个不同的键 —— 这正是漏掉 .text-dimmed 的原因。
+     */
+    const seen = new Map<string, number>();
+    for (const m of topLevel.matchAll(/(?:^|\})\s*([^{}@]+?)\s*\{/g)) {
+      for (const one of m[1].split(',')) {
+        const sel = one.replace(/\s+/g, ' ').trim();
+        if (!sel || !/^[.#a-z*:\[]/i.test(sel)) continue;
+        seen.set(sel, (seen.get(sel) ?? 0) + 1);
+      }
+    }
+
+    // 先确认真的解析到了东西 —— 解析空了这条断言就是空转
+    assert.ok(seen.size > 80, `只解析出 ${seen.size} 个选择器，解析大概是坏的`);
+
+    const dupes = [...seen].filter(([, n]) => n > 1).map(([s, n]) => `${s} ×${n}`);
+    assert.deepEqual(dupes, [], '这些选择器被定义了多次，后面的会静默覆盖前面的');
+  });
 });
 
 describe('加载顺序', () => {

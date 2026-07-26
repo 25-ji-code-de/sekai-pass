@@ -34,6 +34,15 @@ import {
   validateApplicationInput,
   MAX_APPS_PER_USER,
 } from "./applications.ts";
+import {
+  listClientKeys,
+  addClientKey,
+  setClientKeyStatus,
+  deleteClientKey,
+  MAX_KEYS_PER_APP,
+  KEY_STATUSES,
+  type KeyStatus,
+} from "./client-keys.ts";
 
 type Bindings = {
   DB: D1Database;
@@ -822,5 +831,109 @@ apiRouter.post("/apps/:clientId/rotate-secret", async (c) => {
   } catch (error) {
     console.error("Rotate secret error:", error);
     return c.json({ error: "轮换密钥失败" }, 500);
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  private_key_jwt 公钥管理
+ *
+ *  开放平台第一版把应用管起来了，但 client_keys 还是只能手工插库 ——
+ *  也就是说 token_endpoint_auth_method 选了 private_key_jwt 的应用，
+ *  在注册公钥之前根本没法取 token。
+ *
+ *  与 /apps 一样按 owner 隔离：应用不属于你，这些接口一律 404。
+ * ═══════════════════════════════════════════════════════════════════ */
+
+// 列出某个应用的公钥
+apiRouter.get("/apps/:clientId/keys", async (c) => {
+  const user = requireUser(c);
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  try {
+    const keys = await listClientKeys(c.env.DB, c.req.param("clientId"), user.id);
+    if (keys === null) return c.json({ error: "not_found" }, 404);
+    return c.json({ keys, limit: MAX_KEYS_PER_APP }, 200, { "Cache-Control": "no-store" });
+  } catch (error) {
+    console.error("List client keys error:", error);
+    return c.json({ error: "获取公钥列表失败" }, 500);
+  }
+});
+
+// 注册公钥
+apiRouter.post("/apps/:clientId/keys", async (c) => {
+  const user = requireUser(c);
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_request", details: [{ field: "body", message: "不是合法 JSON" }] }, 400);
+  }
+
+  try {
+    const result = await addClientKey(c.env.DB, c.req.param("clientId"), user.id, body);
+    if (!result.ok) {
+      if ("notFound" in result) return c.json({ error: "not_found" }, 404);
+      return validationResponse(c, result.errors);
+    }
+    return c.json({ key: result.key }, 201, { "Cache-Control": "no-store" });
+  } catch (error) {
+    console.error("Add client key error:", error);
+    return c.json({ error: "注册公钥失败" }, 500);
+  }
+});
+
+// 改公钥状态（撤销 / 恢复）
+apiRouter.patch("/apps/:clientId/keys/:keyId", async (c) => {
+  const user = requireUser(c);
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_request", details: [{ field: "body", message: "不是合法 JSON" }] }, 400);
+  }
+
+  if (!KEY_STATUSES.includes(body?.status)) {
+    return validationResponse(c, [
+      { field: "status", message: `只能是 ${KEY_STATUSES.join(" / ")}` },
+    ]);
+  }
+
+  try {
+    const key = await setClientKeyStatus(
+      c.env.DB,
+      c.req.param("clientId"),
+      user.id,
+      c.req.param("keyId"),
+      body.status as KeyStatus,
+    );
+    if (!key) return c.json({ error: "not_found" }, 404);
+    return c.json({ key }, 200, { "Cache-Control": "no-store" });
+  } catch (error) {
+    console.error("Update client key error:", error);
+    return c.json({ error: "更新公钥失败" }, 500);
+  }
+});
+
+// 删除公钥
+apiRouter.delete("/apps/:clientId/keys/:keyId", async (c) => {
+  const user = requireUser(c);
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  try {
+    const deleted = await deleteClientKey(
+      c.env.DB,
+      c.req.param("clientId"),
+      user.id,
+      c.req.param("keyId"),
+    );
+    if (!deleted) return c.json({ error: "not_found" }, 404);
+    return c.json({ success: true }, 200, { "Cache-Control": "no-store" });
+  } catch (error) {
+    console.error("Delete client key error:", error);
+    return c.json({ error: "删除公钥失败" }, 500);
   }
 });

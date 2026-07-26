@@ -1263,6 +1263,73 @@ input[type="url"]:valid:not(:placeholder-shown) {
   overflow-wrap: anywhere;
 }
 
+/* private_key_jwt 的公钥列表 */
+.key-list {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.key-row {
+  padding: 0.7rem 0.85rem;
+  margin-bottom: 0.6rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+/* 撤销的公钥要一眼看出来是"还在但不生效" —— 保留但压暗 */
+.key-row-revoked {
+  opacity: 0.55;
+}
+
+.key-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.key-row-main code {
+  font-family: var(--code-font);
+  font-size: 0.82rem;
+  /* Key ID 由用户指定，最长 128 字符 —— 必须能断行 */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.key-row-meta {
+  margin-top: 0.3rem;
+  font-size: 0.76rem;
+}
+
+.key-row-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+.key-row-actions button {
+  width: auto;
+  min-width: 80px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.app-form h4 {
+  margin: 1.5rem 0 0.5rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 0.95rem;
+}
+
+.app-form textarea[spellcheck='false'] {
+  font-family: var(--code-font);
+  font-size: 0.82rem;
+}
+
 @media (max-width: 480px) {
   .app-meta {
     grid-template-columns: 1fr;
@@ -1272,6 +1339,10 @@ input[type="url"]:valid:not(:placeholder-shown) {
   .app-card-actions button,
   .apps-actions button,
   .form-actions button {
+    flex: 1 1 auto;
+  }
+
+  .key-row-actions button {
     flex: 1 1 auto;
   }
 }

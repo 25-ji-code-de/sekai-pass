@@ -28,15 +28,15 @@
     "hono",
     "edge-computing"
   ],
-  "author": "bili_47177171806",
+  "author": "The 25-ji-code-de Team",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bili-47177171806/sekai-pass.git"
+    "url": "git+https://github.com/25-ji-code-de/sekai-pass.git"
   },
-  "homepage": "https://github.com/bili-47177171806/sekai-pass#readme",
+  "homepage": "https://github.com/25-ji-code-de/sekai-pass#readme",
   "bugs": {
-    "url": "https://github.com/bili-47177171806/sekai-pass/issues"
+    "url": "https://github.com/25-ji-code-de/sekai-pass/issues"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -22,7 +22,21 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const tokens = readFileSync(join(root, 'public/css/sekai-tokens.css'), 'utf8');
+/**
+ * vendored 的四个 token 文件，与上游 `sekai-design/tokens/` 一一对应。
+ *
+ * 分开放而不是拼成一个文件：`@sekai-vendor` 的漂移检查是
+ * 「一个文件 ↔ 一个上游路径」，拼接之后没法逐字比对 —— 而那正是
+ * vendored 的全部意义。（拼接版还会让 stylelint 报
+ * no-duplicate-selectors，因为四个上游文件各有自己的 `:root`。）
+ */
+const LAYERS = ['primitives', 'contract', 'world-system', 'world-night'] as const;
+const layer: Record<string, string> = Object.fromEntries(
+  LAYERS.map((name) => [name, readFileSync(join(root, 'public/css/sekai/' + name + '.css'), 'utf8')]),
+);
+/** 需要「在四层里任意一层找」时用。 */
+const tokens = LAYERS.map((n) => layer[n]).join('\n');
+
 const styles = readFileSync(join(root, 'public/css/styles.css'), 'utf8');
 
 /** 读一个 `--name: value;` 声明（取第一处定义）。 */
@@ -39,20 +53,10 @@ const hexOf = (triplet: string): string =>
     .map((n) => Number(n).toString(16).padStart(2, '0'))
     .join('');
 
-/**
- * 取某个选择器块里定义的全部 `--name: value`。
- *
- * `from` 是起始偏移量，必须给对：文件里有**四个** `:root {`
- * （primitives 一个、contract 一个、两个 world 各一个）。第一版没带偏移，
- * 结果 `:root` 永远匹配到 primitives 那块 —— 里面一个颜色 token 都没有，
- * 于是下面那条"兜底与 world-system 一致"的比对全程空转。
- * 反向验证时改坏 world-system 的取值，测试照样全绿，才发现。
- */
-function blockTokens(css: string, selector: string, from = 0): Map<string, string> {
+/** 取某个选择器块里定义的全部 `--name: value`。 */
+function blockTokens(css: string, selector: string): Map<string, string> {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const m = new RegExp(`(?:^|\\n)[^\\n{}]*${escaped}[^\\n{}]*\\{([\\s\\S]*?)\\n\\}`).exec(
-    css.slice(from),
-  );
+  const m = new RegExp(`(?:^|\\n)[^\\n{}]*${escaped}[^\\n{}]*\\{([\\s\\S]*?)\\n\\}`).exec(css);
   const out = new Map<string, string>();
   if (!m) return out;
   for (const d of m[1].matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)) {
@@ -61,53 +65,42 @@ function blockTokens(css: string, selector: string, from = 0): Map<string, strin
   return out;
 }
 
-/** 某一层的起始偏移。 */
-function layerAt(marker: string): number {
-  const at = tokens.indexOf(marker);
-  assert.ok(at > 0, `token 文件里找不到 ${marker}`);
-  return at;
-}
-
 describe('vendored 的 token 文件', () => {
-  test('四层都在：primitives / contract / 两个 world', () => {
-    assert.match(tokens, /Layer 0: Primitives/);
-    assert.match(tokens, /Layer 1: The semantic contract/);
-    assert.match(tokens, /World: SYSTEM/i);
-    assert.match(tokens, /World: NIGHT/i);
+  test('四个文件与上游 tokens/ 一一对应', () => {
+    assert.match(layer.primitives, /Layer 0: Primitives/);
+    assert.match(layer.contract, /Layer 1: The semantic contract/);
+    assert.match(layer['world-system'], /World: SYSTEM/i);
+    assert.match(layer['world-night'], /World: NIGHT/i);
   });
 
-  test('记了上游的 commit —— 不然没法判断同步到了哪一版', () => {
-    // 只断言"记了"，不比对整份文件 —— 失败时把 16KB CSS 打进日志毫无帮助
-    const header = tokens.slice(0, tokens.indexOf('Layer 0: Primitives'));
-    assert.ok(
-      /sekai-design[^\n]*@\s*[0-9a-f]{7,}/.test(header),
-      '文件头没有记录上游 commit',
-    );
-  });
-
-  test('说明了内容取自提交树而不是工作区', () => {
-    // 上游正在开发，工作区随时和任何一个 commit 都对不上；
-    // 标了 commit 却抄工作区，这行出处比没有还坏
-    assert.match(tokens, /提交树/);
-  });
+  for (const name of LAYERS) {
+    test(`${name}.css 记了上游 commit 与来源文件`, () => {
+      // 只看文件头，失败时不把整份 CSS 打进日志
+      const header = layer[name].slice(0, 800);
+      assert.ok(
+        new RegExp(`tokens/${name}\\.css\\s*@\\s*[0-9a-f]{7,}`).test(header),
+        '头部没写清楚对应哪个上游文件、哪个 commit',
+      );
+      // 上游正在开发，工作区随时和任何一个 commit 都对不上；
+      // 标了 commit 却抄工作区，这行出处比没有还坏
+      assert.match(header, /提交树/, '没说明取自提交树而非工作区');
+      assert.match(header, /不要在这里改任何值/);
+    });
+  }
 
   test('两个 world 都是类作用域', () => {
     /*
      * world-night 排在 world-system 之后加载。它要是写成裸 :root，
      * 本仓（world-system）就会被整个盖掉 —— 而且不会有任何报错，
      * 只是颜色全变了。
-     *
-     * 判据：从每个 world 的标题注释往下，遇到的第一个选择器必须带 class。
      */
-    for (const world of ['SYSTEM', 'NIGHT']) {
-      const at = tokens.indexOf(`World: ${world}`);
-      assert.ok(at > 0, `找不到 World: ${world}`);
-      const selector = /\n([^\n{}]+)\{/.exec(tokens.slice(at))?.[1] ?? '';
-      assert.match(
-        selector,
-        /\.world-(system|night)/,
-        `World: ${world} 的第一个选择器不是类作用域：${selector.trim()}`,
-      );
+    for (const name of ['world-system', 'world-night']) {
+      const selectors = [...layer[name].matchAll(/\n([^\n{}]+)\{/g)].map((m) => m[1].trim());
+      assert.ok(selectors.length > 0, `${name}.css 里找不到选择器`);
+      for (const s of selectors) {
+        if (s.startsWith('@')) continue; // @media 之类
+        assert.match(s, /\.world-(system|night)/, `${name}.css 有非类作用域的选择器：${s}`);
+      }
     }
   });
 
@@ -117,13 +110,14 @@ describe('vendored 的 token 文件', () => {
      * 它就是 world-system。两者一旦分叉，同一个页面加不加
      * class="world-system" 会渲染成两个样子，而且不会有任何报错。
      */
-    const fallback = blockTokens(tokens, ':root', layerAt('Layer 1: The semantic contract'));
-    const system = blockTokens(tokens, ':root.world-system', layerAt('World: SYSTEM'));
+    const fallback = blockTokens(layer.contract, ':root');
+    const system = blockTokens(layer['world-system'], ':root.world-system');
 
-    // 先确认两边都真的解析出东西了 —— 解析空了的话下面的比对就是空转
+    // 先确认两边都真的解析出东西了 —— 解析空了的话下面的比对就是空转。
+    // 第一版就栽在这里：`:root` 匹配到了 primitives 那块（一个颜色都没有），
+    // 改坏 world-system 的取值测试照样全绿，是反向验证抓到的。
     assert.ok(fallback.has('sekai-accent'), 'contract 的 :root 没解析出调色板');
-    assert.ok(system.size > 10, `world-system 块只解析出 ${system.size} 个 token`);
-    assert.ok(system.has('sekai-accent'), 'world-system 块没解析出 --sekai-accent');
+    assert.ok(system.has('sekai-accent'), 'world-system 没解析出 --sekai-accent');
 
     const shared = [...system.keys()].filter((k) => fallback.has(k));
     assert.ok(shared.length > 10, `两边只有 ${shared.length} 个同名 token，比对不成立`);
@@ -134,9 +128,19 @@ describe('vendored 的 token 文件', () => {
     assert.deepEqual(mismatched, []);
   });
 
-  test('注明了出处，并说明不要就地改值', () => {
-    assert.match(tokens, /sekai-design/);
-    assert.match(tokens, /不要在这里改任何值/);
+  test('信号色只在 contract 里定义，两个世界不各来一份', () => {
+    // contract 说得很直白：a system whose danger changes hue per theme
+    // is two systems
+    for (const t of ['sekai-danger', 'sekai-success', 'sekai-warning', 'sekai-info', 'sekai-signal']) {
+      assert.ok(tokenValue(layer.contract, t), `contract.css 缺少 --${t}`);
+      for (const name of ['world-system', 'world-night']) {
+        assert.equal(
+          tokenValue(layer[name], t),
+          null,
+          `${name}.css 重新定义了 --${t} —— 信号色按设计是跨世界一致的`,
+        );
+      }
+    }
   });
 
   test('调色板 token 一律是空格分隔的三元组，没有 hex 孪生', () => {
@@ -283,16 +287,25 @@ describe('新组件样式遵守设计系统', () => {
   });
 });
 
-describe('token 表在 styles.css 之前加载', () => {
-  // 顺序反了的话，别名读到的是空值，整页会退化成浏览器默认色
+describe('加载顺序', () => {
+  /*
+   * 四层必须按 primitives → contract → world 的顺序，且都排在 styles.css
+   * 之前。顺序反了别名会读到空值，整页退化成浏览器默认色 —— 而且不报错。
+   */
   for (const file of ['public/index.html', 'src/lib/html.ts']) {
     test(file, () => {
       const html = readFileSync(join(root, file), 'utf8');
-      const tokensAt = html.indexOf('/css/sekai-tokens.css');
+      const at = LAYERS.map((name) => {
+        const i = html.indexOf(`/css/sekai/${name}.css`);
+        assert.ok(i >= 0, `没有引入 sekai/${name}.css`);
+        return i;
+      });
+      for (let i = 1; i < at.length; i++) {
+        assert.ok(at[i] > at[i - 1], `${LAYERS[i]}.css 必须排在 ${LAYERS[i - 1]}.css 之后`);
+      }
       const stylesAt = html.indexOf('/css/styles.css');
-      assert.ok(tokensAt >= 0, '没有引入 sekai-tokens.css');
       assert.ok(stylesAt >= 0, '没有引入 styles.css');
-      assert.ok(tokensAt < stylesAt, 'sekai-tokens.css 必须在 styles.css 之前');
+      assert.ok(Math.max(...at) < stylesAt, 'token 必须全部排在 styles.css 之前');
     });
   }
 });

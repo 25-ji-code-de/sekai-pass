@@ -54,7 +54,10 @@ export function renderPage(title: string, content: string): string {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/sekai-tokens.css">
+  <link rel="stylesheet" href="/css/sekai/primitives.css">
+  <link rel="stylesheet" href="/css/sekai/contract.css">
+  <link rel="stylesheet" href="/css/sekai/world-system.css">
+  <link rel="stylesheet" href="/css/sekai/world-night.css">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>

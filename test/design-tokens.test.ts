@@ -77,7 +77,18 @@ describe('vendored 的 token 文件', () => {
   });
 
   test('记了上游的 commit —— 不然没法判断同步到了哪一版', () => {
-    assert.match(tokens, /sekai-design @ [0-9a-f]{7,}/);
+    // 只断言"记了"，不比对整份文件 —— 失败时把 16KB CSS 打进日志毫无帮助
+    const header = tokens.slice(0, tokens.indexOf('Layer 0: Primitives'));
+    assert.ok(
+      /sekai-design[^\n]*@\s*[0-9a-f]{7,}/.test(header),
+      '文件头没有记录上游 commit',
+    );
+  });
+
+  test('说明了内容取自提交树而不是工作区', () => {
+    // 上游正在开发，工作区随时和任何一个 commit 都对不上；
+    // 标了 commit 却抄工作区，这行出处比没有还坏
+    assert.match(tokens, /提交树/);
   });
 
   test('两个 world 都是类作用域', () => {

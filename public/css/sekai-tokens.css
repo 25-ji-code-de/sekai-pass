@@ -2,13 +2,17 @@
 /* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
 
 /* ============================================================
-   VENDORED —— sekai-design/tokens/，与上游 tokens/index.css 同样的四层：
+   VENDORED —— sekai-design/tokens/ @ cbbb0ec
+
+   与上游 tokens/index.css 同样的四层：
      Layer 0  primitives.css      世界无关的原始刻度
      Layer 1  contract.css        语义契约（:root 的兜底就是 world-system）
-     Layer 2  world-system.css    .world-system
+     Layer 2  world-system.css    .world-system  ← 本仓
      Layer 2  world-night.css     .world-night
 
-   sekai-design @ cbbb0ec
+   内容取自**提交树**（git show cbbb0ec:tokens/…），不是工作区。
+   上游那边正在改，工作区随时和任何一个 commit 都对不上；
+   标了 commit 就必须名副其实，否则这行出处比没有还坏。
 
    **不要在这里改任何值。** 要改就改 sekai-design，再整体同步过来。
    一份设计系统被各仓各改一点，就退化成了各仓各有一份 ——
@@ -18,9 +22,6 @@
    与上游逐字可比：等 sekai-design 推上 GitHub 打了 tag，
    .github/scripts/static-check.mjs 的漂移检查就能直接拉原文比对。
    只 vendored 一部分的话，那个比对做不了。
-
-   本仓是 world-system。两个 world 都是类作用域，默认走 :root 兜底，
-   所以不加任何 class 时的表现就是 world-system。
    ============================================================ */
 
 /* ============================================================

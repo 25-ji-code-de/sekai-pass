@@ -380,6 +380,8 @@ export async function renderApps(app, api, navigate) {
    */
   async function showKeys(target) {
     const container = document.getElementById('app-form-container');
+    /** 当前生效中的公钥数，由 loadKeys 维护。 */
+    let activeCount = 0;
     container.innerHTML = `
       <div class="app-form">
         <h3>「${escapeHtml(target.name)}」的公钥</h3>
@@ -443,6 +445,10 @@ export async function renderApps(app, api, navigate) {
           return;
         }
 
+        // 记下当前还有几把生效中的 —— 撤销/删除最后一把的后果与撤销其中
+        // 一把完全不同，确认语要说清楚
+        activeCount = keys.filter((k) => k.status === 'active').length;
+
         listEl.innerHTML = `<ul class="key-list">${keys.map(renderKeyRow).join('')}</ul>`;
         listEl.querySelectorAll('[data-key-action]').forEach((btn) => {
           btn.addEventListener('click', () => onKeyAction(btn.dataset.keyAction, btn.dataset.keyId));
@@ -475,14 +481,39 @@ export async function renderApps(app, api, navigate) {
       `;
     }
 
+    /*
+     * 撤销/删除**最后一把**生效中的公钥，与撤销其中一把是两件事：
+     * 前者让整个应用取不到任何 token，正在用它登录的用户全部失败。
+     * 原来两种情况用的是同一句确认语（「用它签名的客户端会立刻无法取
+     * token」），把「这一把不能用了」和「这个应用停了」说成了一件事。
+     */
+    function lastKeyWarning(action) {
+      if (activeCount > 1) return '';
+      const verb = action === 'delete' ? '删除' : '撤销';
+      return (
+        `这是最后一把生效中的公钥。${verb}之后「${target.name}」` +
+        '将取不到任何 token，正在用它登录的用户会立刻失败。\n\n'
+      );
+    }
+
     async function onKeyAction(action, keyId) {
       const base = `/apps/${encodeURIComponent(target.client_id)}/keys/${encodeURIComponent(keyId)}`;
       try {
         if (action === 'delete') {
           // 撤销是可逆的，删除不是 —— 只有删除需要再确认一次
-          if (!window.confirm(`删除公钥 ${keyId}？用它签名的客户端会立刻无法取 token。`)) return;
+          const msg =
+            lastKeyWarning('delete') +
+            `删除公钥 ${keyId}？用它签名的客户端会立刻无法取 token。`;
+          if (!window.confirm(msg)) return;
           await api.delete(base, { headers: api.getAuthHeaders() });
           showSuccess('已删除');
+        } else if (action === 'revoke' && activeCount <= 1) {
+          // 撤销本身可逆，平时不打断；但这一把是最后一把时后果不可忽略
+          if (!window.confirm(`${lastKeyWarning('revoke')}确定撤销 ${keyId}？（撤销后可以恢复）`)) {
+            return;
+          }
+          await api.patch(base, { status: 'revoked' }, { headers: api.getAuthHeaders() });
+          showSuccess('已撤销');
         } else {
           const status = action === 'revoke' ? 'revoked' : 'active';
           await api.patch(base, { status }, { headers: api.getAuthHeaders() });

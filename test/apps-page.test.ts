@@ -87,20 +87,42 @@ function makeEl(id = ""): StubEl {
      * 解析出来，造成对应的元素，这样测试才能真的「点」到编辑/管理公钥。
      */
     querySelectorAll(sel: string) {
-      if (sel !== "[data-action]") return [];
       const found: StubEl[] = [];
-      for (const m of html.matchAll(
-        /data-action="([^"]+)"\s+data-client-id="([^"]+)"/g,
-      )) {
-        const key = `${m[1]}:${m[2]}`;
-        let btn = actionButtons.get(key);
-        if (!btn) {
-          btn = makeEl();
+
+      /*
+       * 每次都造**新**元素，不复用缓存里的。
+       *
+       * 第一版按 `动作:id` 缓存了按钮对象，结果每次 loadKeys 重渲染都往
+       * 同一个对象上再挂一个监听器；点一次触发全部累积的监听器，每个又
+       * 触发一次 loadKeys —— 指数级增长，测试跑到堆溢出。
+       *
+       * 真实 DOM 里 innerHTML 一写，旧节点连同监听器一起没了。桩要照这个来。
+       */
+      if (sel === "[data-action]") {
+        for (const m of html.matchAll(
+          /data-action="([^"]+)"\s+data-client-id="([^"]+)"/g,
+        )) {
+          const btn = makeEl();
           btn.dataset = { action: m[1], clientId: m[2] };
-          actionButtons.set(key, btn);
+          actionButtons.set(`${m[1]}:${m[2]}`, btn);
+          found.push(btn);
         }
-        found.push(btn);
+        return found;
       }
+
+      if (sel === "[data-key-action]") {
+        // 公钥行的按钮，两个属性跨行写
+        for (const m of html.matchAll(
+          /data-key-action="([^"]+)"[^>]*?data-key-id="([^"]+)"/g,
+        )) {
+          const btn = makeEl();
+          btn.dataset = { keyAction: m[1], keyId: m[2] };
+          keyButtons.set(`${m[1]}:${m[2]}`, btn);
+          found.push(btn);
+        }
+        return found;
+      }
+
       return found;
     },
     querySelector() {
@@ -112,11 +134,25 @@ function makeEl(id = ""): StubEl {
 
 /** `动作:clientId` -> 按钮，测试用它来「点击」。 */
 let actionButtons: Map<string, StubEl>;
+/** `公钥动作:keyId` -> 按钮。 */
+let keyButtons: Map<string, StubEl>;
+/** window.confirm 收到的全部提示文本，以及下一次要返回什么。 */
+let confirms: string[];
+let confirmAnswer: boolean;
 
 function setupDom() {
   registry = new Map();
   written = [];
   actionButtons = new Map();
+  keyButtons = new Map();
+  confirms = [];
+  confirmAnswer = true;
+  (globalThis as any).window = {
+    confirm(msg: string) {
+      confirms.push(msg);
+      return confirmAnswer;
+    },
+  };
   (globalThis as any).document = {
     getElementById(id: string) {
       if (!registry.has(id)) registry.set(id, makeEl(id));
@@ -160,10 +196,14 @@ function makeApi(overrides: Record<string, unknown> = {}) {
       calls.push({ method: "POST", path, body });
       return { application: overrides.savedApp };
     },
-    async patch() {
+    // patch / delete 必须也记账：不记的话「点了取消就什么都不发」
+    // 这条断言会永远成立 —— 一个空测。
+    async patch(path: string, body: unknown) {
+      calls.push({ method: "PATCH", path, body });
       return {};
     },
-    async delete() {
+    async delete(path: string) {
+      calls.push({ method: "DELETE", path });
       return {};
     },
   };
@@ -333,6 +373,86 @@ describe("开放平台：切成机密客户端时的提醒", () => {
       "应用名原样进了 innerHTML —— 存储型 XSS",
     );
     assert.ok(all.includes("&lt;img"), "没有看到转义后的形式");
+  });
+});
+
+describe("公钥管理：撤销/删除最后一把时的确认语", () => {
+  beforeEach(setupDom);
+
+  const CONFIDENTIAL = {
+    ...PUBLIC_APP,
+    token_endpoint_auth_method: "private_key_jwt",
+  };
+  const key = (id: string, status = "active") => ({
+    key_id: id,
+    algorithm: "ES256",
+    status,
+    created_at: 1700000000000,
+  });
+
+  /** 渲染 -> 点「管理公钥」-> 点某把 key 上的某个动作。 */
+  async function actOnKey(
+    keys: unknown[],
+    action: string,
+    keyId: string,
+  ): Promise<ReturnType<typeof makeApi>> {
+    const api = makeApi({ apps: [CONFIDENTIAL], keys });
+    await renderApps(document.getElementById("app"), api, () => {});
+    await clickAction("keys", CONFIDENTIAL.client_id);
+    const btn = keyButtons.get(`${action}:${keyId}`);
+    assert.ok(btn, `找不到公钥按钮 ${action}:${keyId}`);
+    await btn!.click();
+    return api;
+  }
+
+  test("删除最后一把 —— 确认语说清整个应用会停", async () => {
+    await actOnKey([key("k1")], "delete", "k1");
+    assert.equal(confirms.length, 1);
+    assert.match(confirms[0], /最后一把生效中的公钥/);
+    assert.match(confirms[0], /取不到任何 token/);
+    assert.match(confirms[0], new RegExp(CONFIDENTIAL.name), "得指名是哪个应用");
+  });
+
+  test("删除其中一把（还有别的生效中）—— 不说「最后一把」", async () => {
+    await actOnKey([key("k1"), key("k2")], "delete", "k1");
+    assert.equal(confirms.length, 1);
+    assert.doesNotMatch(confirms[0], /最后一把/);
+  });
+
+  test("已撤销的那把不算数：只剩一把生效中时仍然警告", async () => {
+    await actOnKey([key("k1"), key("k2", "revoked")], "delete", "k1");
+    assert.match(confirms[0], /最后一把生效中的公钥/);
+  });
+
+  test("撤销最后一把也要确认（原来撤销完全不问）", async () => {
+    const api = await actOnKey([key("k1")], "revoke", "k1");
+    assert.equal(confirms.length, 1, "撤销最后一把时没有确认");
+    assert.match(confirms[0], /最后一把生效中的公钥/);
+    assert.ok(api.calls.some((c) => c.method === "PATCH"));
+  });
+
+  test("撤销其中一把不打断（撤销可逆，平时不该问）", async () => {
+    await actOnKey([key("k1"), key("k2")], "revoke", "k1");
+    assert.deepEqual(confirms, [], "撤销非最后一把时不该弹确认");
+  });
+
+  test("在确认框上点取消 —— 什么请求都不发", async () => {
+    confirmAnswer = false;
+    const api = makeApi({ apps: [CONFIDENTIAL], keys: [key("k1")] });
+    await renderApps(document.getElementById("app"), api, () => {});
+    await clickAction("keys", CONFIDENTIAL.client_id);
+    api.calls.length = 0;
+    await keyButtons.get("delete:k1")!.click();
+    assert.deepEqual(
+      api.calls.filter((c) => c.method !== "GET"),
+      [],
+      "点了取消却还是发了请求",
+    );
+  });
+
+  test("恢复一把已撤销的不弹确认", async () => {
+    await actOnKey([key("k1", "revoked")], "activate", "k1");
+    assert.deepEqual(confirms, []);
   });
 });
 

@@ -19,3 +19,6 @@ jobs:
         run: npm ci || npm install
       - name: Typecheck
         run: npm run type-check
+      # Node 24 原生类型剥离，无需额外测试运行时
+      - name: Test
+        run: npm test

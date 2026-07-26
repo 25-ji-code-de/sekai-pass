@@ -23,6 +23,17 @@ import { decryptPassword, validateRequest } from "./decrypt.ts";
 import { verifyTurnstileDetailed } from "./turnstile.ts";
 import { createChallengeState, generatePoWChallenge, verifyPoWHash, POW_DIFFICULTY, POW_DIFFICULTY_STRICT, type ChallengeState } from "./pow.ts";
 import { validateScopeParameter, formatScopes } from "./scope.ts";
+import {
+  listApplications,
+  getApplication,
+  createApplication,
+  updateApplication,
+  deleteApplication,
+  rotateClientSecret,
+  isAtAppLimit,
+  validateApplicationInput,
+  MAX_APPS_PER_USER,
+} from "./applications.ts";
 
 type Bindings = {
   DB: D1Database;
@@ -672,5 +683,144 @@ apiRouter.post("/oauth/authorize", async (c) => {
   } catch (error) {
     console.error("OAuth authorize error:", error);
     return c.json({ error: "授权失败" }, 500);
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  开放平台 —— OAuth 应用自助管理
+ *
+ *  在这之前 applications 表没有任何写入代码，注册应用只能手工改库。
+ *
+ *  全部接口都要求已登录会话，并按 owner_user_id 隔离 ——
+ *  拿到别人的 client_id 也读不到、改不了、删不掉。
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/** 统一的未登录响应。 */
+function requireUser(c: any) {
+  const user = c.get("user");
+  return user ?? null;
+}
+
+/** 把校验错误整理成统一形状。 */
+function validationResponse(c: any, errors: { field: string; message: string }[]) {
+  return c.json({ error: "invalid_request", details: errors }, 400);
+}
+
+// 列出我的应用
+apiRouter.get("/apps", async (c) => {
+  const user = requireUser(c);
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  try {
+    const apps = await listApplications(c.env.DB, user.id);
+    return c.json({ applications: apps, limit: MAX_APPS_PER_USER }, 200, {
+      "Cache-Control": "no-store",
+    });
+  } catch (error) {
+    console.error("List applications error:", error);
+    return c.json({ error: "获取应用列表失败" }, 500);
+  }
+});
+
+// 创建应用
+apiRouter.post("/apps", async (c) => {
+  const user = requireUser(c);
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_request", details: [{ field: "body", message: "不是合法 JSON" }] }, 400);
+  }
+
+  const errors = validateApplicationInput(body);
+  if (errors.length) return validationResponse(c, errors);
+
+  try {
+    if (await isAtAppLimit(c.env.DB, user.id)) {
+      return c.json(
+        { error: "limit_reached", message: `每个账号最多创建 ${MAX_APPS_PER_USER} 个应用` },
+        409,
+      );
+    }
+
+    const { application, client_secret } = await createApplication(c.env.DB, user.id, body);
+
+    // client_secret 只在创建时返回这一次，之后不再可读
+    return c.json({ application, client_secret }, 201, { "Cache-Control": "no-store" });
+  } catch (error) {
+    console.error("Create application error:", error);
+    return c.json({ error: "创建应用失败" }, 500);
+  }
+});
+
+// 取单个应用
+apiRouter.get("/apps/:clientId", async (c) => {
+  const user = requireUser(c);
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  try {
+    const app = await getApplication(c.env.DB, c.req.param("clientId"), user.id);
+    if (!app) return c.json({ error: "not_found" }, 404);
+    return c.json({ application: app }, 200, { "Cache-Control": "no-store" });
+  } catch (error) {
+    console.error("Get application error:", error);
+    return c.json({ error: "获取应用失败" }, 500);
+  }
+});
+
+// 更新应用
+apiRouter.put("/apps/:clientId", async (c) => {
+  const user = requireUser(c);
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_request", details: [{ field: "body", message: "不是合法 JSON" }] }, 400);
+  }
+
+  const errors = validateApplicationInput(body, { partial: true });
+  if (errors.length) return validationResponse(c, errors);
+
+  try {
+    const app = await updateApplication(c.env.DB, c.req.param("clientId"), user.id, body);
+    if (!app) return c.json({ error: "not_found" }, 404);
+    return c.json({ application: app }, 200, { "Cache-Control": "no-store" });
+  } catch (error) {
+    console.error("Update application error:", error);
+    return c.json({ error: "更新应用失败" }, 500);
+  }
+});
+
+// 删除应用（连带清理它签发过的 token）
+apiRouter.delete("/apps/:clientId", async (c) => {
+  const user = requireUser(c);
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  try {
+    const deleted = await deleteApplication(c.env.DB, c.req.param("clientId"), user.id);
+    if (!deleted) return c.json({ error: "not_found" }, 404);
+    return c.json({ success: true }, 200, { "Cache-Control": "no-store" });
+  } catch (error) {
+    console.error("Delete application error:", error);
+    return c.json({ error: "删除应用失败" }, 500);
+  }
+});
+
+// 轮换 client_secret
+apiRouter.post("/apps/:clientId/rotate-secret", async (c) => {
+  const user = requireUser(c);
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  try {
+    const secret = await rotateClientSecret(c.env.DB, c.req.param("clientId"), user.id);
+    if (!secret) return c.json({ error: "not_found" }, 404);
+    return c.json({ client_secret: secret }, 200, { "Cache-Control": "no-store" });
+  } catch (error) {
+    console.error("Rotate secret error:", error);
+    return c.json({ error: "轮换密钥失败" }, 500);
   }
 });

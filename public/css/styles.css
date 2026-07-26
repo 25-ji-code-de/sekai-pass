@@ -1043,3 +1043,235 @@ input[type="url"]:valid:not(:placeholder-shown) {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ═══════════════════════════════════════════════════════════
+ *  开放平台 —— OAuth 应用自助管理
+ * ═══════════════════════════════════════════════════════════ */
+
+.page-header {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.page-header h2 {
+  margin: 0 0 0.25rem;
+  color: var(--text-main);
+}
+
+.page-subtitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.loading-text,
+.text-dimmed {
+  color: var(--text-muted);
+}
+
+.empty-state {
+  padding: 2rem 1rem;
+  text-align: center;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+}
+
+.empty-state p {
+  margin: 0.35rem 0;
+}
+
+.app-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1rem;
+}
+
+.app-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.app-card-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--text-main);
+  /* 应用名是用户输入，防止超长名字撑破卡片 */
+  overflow-wrap: anywhere;
+}
+
+.app-badge {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: rgb(var(--bg-white) / 0.05);
+  border: 1px solid var(--border-color);
+}
+
+.app-desc {
+  margin: 0.5rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.app-meta {
+  margin: 0.85rem 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+.app-meta dt {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.app-meta dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.app-meta code {
+  font-family: var(--code-font);
+  font-size: 0.8rem;
+  /* 回调地址可能很长，必须能断行而不是横向撑破 */
+  overflow-wrap: anywhere;
+}
+
+.uri-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.uri-list li {
+  margin-bottom: 0.15rem;
+}
+
+.app-card-actions,
+.apps-actions,
+.form-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.app-card-actions button,
+.apps-actions button,
+.form-actions button {
+  width: auto;
+  min-width: 96px;
+}
+
+.btn-danger {
+  background: rgb(var(--error-color) / 0.15);
+  border: 1px solid rgb(var(--error-color) / 0.4);
+  color: rgb(var(--error-color));
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgb(var(--error-color) / 0.25);
+}
+
+.app-form {
+  margin-top: 1.25rem;
+  padding: 1.15rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.app-form h3 {
+  margin: 0 0 1rem;
+  color: var(--text-main);
+  overflow-wrap: anywhere;
+}
+
+.app-form label {
+  display: block;
+  margin: 0.85rem 0 0.3rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.app-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-main);
+  font-family: var(--code-font);
+  font-size: 0.85rem;
+  resize: vertical;
+}
+
+.app-form textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.field-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.danger-zone {
+  border-color: rgb(var(--error-color) / 0.35);
+}
+
+.warn-text {
+  font-size: 0.85rem;
+  color: rgb(var(--error-color));
+  line-height: 1.5;
+}
+
+.secret-reveal {
+  margin-top: 1.25rem;
+  padding: 1.15rem;
+  background: var(--card-bg);
+  border: 1px solid rgb(var(--primary-color-mix) / 0.4);
+  border-radius: 8px;
+}
+
+.secret-reveal h3 {
+  margin: 0 0 0.75rem;
+  color: var(--text-main);
+}
+
+.secret-value {
+  display: block;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-family: var(--code-font);
+  font-size: 0.85rem;
+  /* 48 字符的密钥必须能整串选中复制 */
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .app-meta {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+
+  .app-card-actions button,
+  .apps-actions button,
+  .form-actions button {
+    flex: 1 1 auto;
+  }
+}

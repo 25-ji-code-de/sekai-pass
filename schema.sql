@@ -36,8 +36,48 @@ CREATE TABLE IF NOT EXISTS applications (
     client_id TEXT NOT NULL UNIQUE,
     client_secret TEXT NOT NULL,
     redirect_uris TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    -- 归属：谁创建的这个应用。开放平台按它做权限隔离。
+    -- 允许为 NULL —— 平台上线前手工插入的应用没有归属，需要人工认领。
+    owner_user_id TEXT,
+    -- none = 公开客户端（靠 PKCE 保护）；private_key_jwt = 机密客户端（RFC 7523）
+    token_endpoint_auth_method TEXT NOT NULL DEFAULT 'none',
+    description TEXT,
+    homepage_url TEXT,
+    updated_at INTEGER,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_applications_owner ON applications(owner_user_id);
+
+-- Client public keys for private_key_jwt (RFC 7523)
+--
+-- 注意：这张表与下面的 jwt_replay_cache 此前**不在 schema 里**，
+-- 但 src/lib/client-auth.ts 一直在查它们。也就是说照本文件全新部署出来的
+-- 实例，private_key_jwt 客户端认证会直接不可用。
+CREATE TABLE IF NOT EXISTS client_keys (
+    client_id TEXT NOT NULL,
+    key_id TEXT NOT NULL,
+    public_key_jwk TEXT NOT NULL,
+    algorithm TEXT NOT NULL DEFAULT 'ES256',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (client_id, key_id),
+    FOREIGN KEY (client_id) REFERENCES applications(client_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_keys_lookup ON client_keys(client_id, key_id, status);
+
+-- JWT assertion 防重放（RFC 7523 的 jti 只能用一次）
+CREATE TABLE IF NOT EXISTS jwt_replay_cache (
+    jti TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (jti, client_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_jwt_replay_expires ON jwt_replay_cache(expires_at);
 
 -- Authorization codes table
 CREATE TABLE IF NOT EXISTS auth_codes (

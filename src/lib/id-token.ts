@@ -19,10 +19,10 @@
 // Implements OpenID Connect ID Token functionality
 
 import type { D1Database, KVNamespace } from "@cloudflare/workers-types";
-import { signJWT, verifyJWT, decodeJWT } from "./jwt";
-import { getCurrentSigningKey, getSigningKeyByKid } from "./keys";
-import { getClaimsForScope } from "./oidc-scope";
-import { SCOPES, hasScopes } from "./scope";
+import { signJWT, verifyJWT, decodeJWT } from "./jwt.ts";
+import { getCurrentSigningKey, getSigningKeyByKid } from "./keys.ts";
+import { getClaimsForScope } from "./oidc-scope.ts";
+import { SCOPES, hasScopes } from "./scope.ts";
 
 export interface IDTokenClaims {
   // Required claims

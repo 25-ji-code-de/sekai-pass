@@ -19,7 +19,7 @@
 // Short-lived access tokens (1 hour) and long-lived refresh tokens (30 days)
 
 import type { D1Database } from "@cloudflare/workers-types";
-import { generateId } from "./password";
+import { generateId } from "./password.ts";
 
 export interface TokenPair {
   access_token: string;

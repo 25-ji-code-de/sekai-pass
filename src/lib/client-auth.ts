@@ -18,7 +18,7 @@
 // Client Authentication Module (RFC 7523)
 // Implements Private Key JWT client authentication for OAuth 2.1
 
-import { decodeJWT, base64URLDecode } from "./jwt";
+import { decodeJWT, base64URLDecode } from "./jwt.ts";
 
 export interface AuthenticationResult {
   authenticated: boolean;

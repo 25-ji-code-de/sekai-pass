@@ -17,18 +17,18 @@
 import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
-import { initializeLucia } from "./lib/auth";
-import { generateId } from "./lib/password";
-import { verifyPKCE, validateCodeChallenge, validateCodeVerifier } from "./lib/pkce";
-import { issueTokens, validateAccessToken, refreshAccessToken, revokeRefreshToken, revokeAllUserTokens } from "./lib/tokens";
-import { validateScopeParameter, formatScopes, filterUserData, SCOPES, hasScopes } from "./lib/scope";
-import { isOIDCRequest } from "./lib/oidc-scope";
-import { generateIDToken } from "./lib/id-token";
-import { generateOIDCMetadata } from "./lib/oidc-discovery";
-import { getPublicKeys, checkAndRotateKeys } from "./lib/keys";
-import { authenticateClient } from "./lib/client-auth";
-import * as html from "./lib/html";
-import { apiRouter } from "./lib/api";
+import { initializeLucia } from "./lib/auth.ts";
+import { generateId } from "./lib/password.ts";
+import { verifyPKCE, validateCodeChallenge, validateCodeVerifier } from "./lib/pkce.ts";
+import { issueTokens, validateAccessToken, refreshAccessToken, revokeRefreshToken, revokeAllUserTokens } from "./lib/tokens.ts";
+import { validateScopeParameter, formatScopes, filterUserData, SCOPES, hasScopes } from "./lib/scope.ts";
+import { isOIDCRequest } from "./lib/oidc-scope.ts";
+import { generateIDToken } from "./lib/id-token.ts";
+import { generateOIDCMetadata } from "./lib/oidc-discovery.ts";
+import { getPublicKeys, checkAndRotateKeys } from "./lib/keys.ts";
+import { authenticateClient } from "./lib/client-auth.ts";
+import * as html from "./lib/html.ts";
+import { apiRouter } from "./lib/api.ts";
 
 type Bindings = {
   DB: D1Database;

@@ -17,12 +17,12 @@
 
 import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
-import { initializeLucia } from "./auth";
-import { hashPassword, verifyPassword, generateId } from "./password";
-import { decryptPassword, validateRequest } from "./decrypt";
-import { verifyTurnstileDetailed } from "./turnstile";
-import { createChallengeState, generatePoWChallenge, verifyPoWHash, POW_DIFFICULTY, POW_DIFFICULTY_STRICT, type ChallengeState } from "./pow";
-import { validateScopeParameter, formatScopes } from "./scope";
+import { initializeLucia } from "./auth.ts";
+import { hashPassword, verifyPassword, generateId } from "./password.ts";
+import { decryptPassword, validateRequest } from "./decrypt.ts";
+import { verifyTurnstileDetailed } from "./turnstile.ts";
+import { createChallengeState, generatePoWChallenge, verifyPoWHash, POW_DIFFICULTY, POW_DIFFICULTY_STRICT, type ChallengeState } from "./pow.ts";
+import { validateScopeParameter, formatScopes } from "./scope.ts";
 
 type Bindings = {
   DB: D1Database;

@@ -18,7 +18,7 @@
 // OpenID Connect Discovery Metadata
 // Generates OIDC discovery document per OpenID Connect Discovery 1.0
 
-import { SCOPES } from "./scope";
+import { SCOPES } from "./scope.ts";
 
 export interface OIDCMetadata {
   issuer: string;

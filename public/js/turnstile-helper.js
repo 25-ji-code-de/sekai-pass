@@ -11,8 +11,13 @@
  */
 
 const SCRIPT_BASE = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-/** Soft deadline: no token by then → treat as failed for callers that poll. */
-const SOFT_DEADLINE_MS = 8000;
+/**
+ * Soft deadline: no token by then → treat as failed for callers that poll.
+ * Generous on purpose: a cold first visit (uncached api.js, fresh challenge
+ * state) routinely needs 10-20s. The countdown is cancelled entirely once the
+ * widget turns interactive — a checkbox waiting on the user is not a failure.
+ */
+const SOFT_DEADLINE_MS = 30000;
 
 /** @type {Promise<boolean> | null} */
 let apiLoadPromise = null;
@@ -98,6 +103,7 @@ function afterLayout() {
  *   remove: () => void,
  *   waitForToken: (timeoutMs?: number) => Promise<string | null>,
  *   hadFatalError: () => boolean,
+ *   isInteractive: () => boolean,
  * }>}
  */
 export async function mountTurnstile(container, opts) {
@@ -118,6 +124,7 @@ export async function mountTurnstile(container, opts) {
   let widgetId = null;
   let destroyed = false;
   let fatal = false;
+  let interactive = false;
   let errorCount = 0;
   /** @type {ReturnType<typeof setTimeout> | null} */
   let softTimer = null;
@@ -152,6 +159,7 @@ export async function mountTurnstile(container, opts) {
     if (destroyed || typeof window.turnstile?.render !== 'function') return;
     clearContainer();
     token = null;
+    interactive = false;
 
     try {
       widgetId = window.turnstile.render(container, {
@@ -183,21 +191,31 @@ export async function mountTurnstile(container, opts) {
         'timeout-callback': () => {
           token = null;
         },
+        'before-interactive-callback': () => {
+          // Widget needs user input (checkbox). It is healthy and waiting on a
+          // human — a fixed deadline no longer applies.
+          interactive = true;
+          if (softTimer != null) {
+            clearTimeout(softTimer);
+            softTimer = null;
+          }
+        },
         'error-callback': (code) => {
           token = null;
           const codeStr = String(code ?? '');
           console.warn('[Turnstile] widget error', codeStr);
           errorCount += 1;
 
-          // 600* = generic challenge failure (often challenge-platform 400 / bot score).
-          // 110* = config (bad sitekey / hostname). Neither is fixed by waiting long.
           const family = codeStr.slice(0, 3);
-          if (family === '600' || family === '110' || family === '300') {
-            // One CF auto-retry window, then give up so the page can use PoW.
-            if (errorCount >= 2 || family === '110') {
+          if (family === '110') {
+            // Config error (bad sitekey / hostname) — retrying cannot fix it.
+            markFatal(codeStr);
+          } else if (family === '600' || family === '300') {
+            // Generic challenge failure. Cold first connections commonly throw
+            // one or two of these before retry:auto succeeds; only give up
+            // after several consecutive failures.
+            if (errorCount >= 4) {
               markFatal(codeStr);
-            } else {
-              // Second chance only via CF retry:auto; hard-fail after soft deadline.
             }
           }
 
@@ -220,7 +238,7 @@ export async function mountTurnstile(container, opts) {
   }
 
   softTimer = setTimeout(() => {
-    if (!token && !destroyed) {
+    if (!token && !destroyed && !interactive) {
       console.warn('[Turnstile] soft deadline, no token');
       markFatal('timeout');
     }
@@ -259,13 +277,14 @@ export async function mountTurnstile(container, opts) {
     reset() {
       token = null;
       fatal = false;
+      interactive = false;
       errorCount = 0;
       if (softTimer != null) {
         clearTimeout(softTimer);
         softTimer = null;
       }
       softTimer = setTimeout(() => {
-        if (!token && !destroyed) markFatal('timeout');
+        if (!token && !destroyed && !interactive) markFatal('timeout');
       }, SOFT_DEADLINE_MS);
 
       if (widgetId != null && window.turnstile?.reset) {
@@ -289,6 +308,9 @@ export async function mountTurnstile(container, opts) {
     },
     hadFatalError() {
       return fatal;
+    },
+    isInteractive() {
+      return interactive && !token && !fatal;
     },
   };
 }

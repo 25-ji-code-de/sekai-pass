@@ -127,23 +127,6 @@ export function renderRegister(app, api, navigate) {
     }
   }
 
-  async function probeTurnstileHost() {
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 4000);
-      await fetch('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit', {
-        method: 'GET',
-        mode: 'no-cors',
-        cache: 'no-store',
-        signal: ctrl.signal,
-      });
-      clearTimeout(t);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   async function initCaptcha() {
     captchaMode = 'pending';
     powNonce = null;
@@ -151,13 +134,6 @@ export function renderRegister(app, api, navigate) {
     destroyTurnstile();
     turnstileContainer.style.display = '';
     powStatus.style.display = 'none';
-
-    const reachable = await probeTurnstileHost();
-    if (!reachable) {
-      console.warn('[Turnstile] challenges.cloudflare.com unreachable, using PoW');
-      await startPow();
-      return;
-    }
 
     try {
       turnstileWidget = await mountTurnstile(turnstileContainer, {
@@ -174,9 +150,13 @@ export function renderRegister(app, api, navigate) {
         await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
         captchaMode = 'turnstile';
 
+        // Safety net if onFatal was missed. Never fires while the widget is
+        // interactive — that means it is healthy and waiting on the user.
+        const widget = turnstileWidget;
         void (async () => {
-          const token = await turnstileWidget.waitForToken(10000);
-          if (!token && captchaMode === 'turnstile') {
+          const token = await widget.waitForToken(45000);
+          if (!token && captchaMode === 'turnstile' && widget === turnstileWidget
+              && !widget.isInteractive()) {
             await fallbackToPow('wait-timeout');
           }
         })();
@@ -244,9 +224,17 @@ export function renderRegister(app, api, navigate) {
       }
       turnstileToken = turnstileWidget?.getToken() || null;
       if (!turnstileToken && turnstileWidget) {
+        if (turnstileWidget.isInteractive()) {
+          showError('请先完成上方的人机验证');
+          return;
+        }
         turnstileToken = await turnstileWidget.waitForToken(8000);
       }
       if (!turnstileToken) {
+        if (turnstileWidget?.isInteractive()) {
+          showError('请先完成上方的人机验证');
+          return;
+        }
         try {
           await fallbackToPow('submit-no-token');
           showError('人机验证已切换，请再次点击注册');

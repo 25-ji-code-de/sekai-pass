@@ -119,14 +119,6 @@ export function renderLogin(app, api, navigate) {
     turnstileContainer.style.display = '';
     powStatus.style.display = 'none';
 
-    // If Turnstile JS cannot reach Cloudflare at all (common on some networks), skip.
-    const reachable = await probeTurnstileHost();
-    if (!reachable) {
-      console.warn('[Turnstile] challenges.cloudflare.com unreachable, using PoW');
-      await startPow();
-      return;
-    }
-
     try {
       turnstileWidget = await mountTurnstile(turnstileContainer, {
         sitekey: turnstileSiteKey,
@@ -143,10 +135,13 @@ export function renderLogin(app, api, navigate) {
         await api.post('/challenge/report', { challengeId, turnstileLoaded: true });
         captchaMode = 'turnstile';
 
-        // Safety net if onFatal was missed
+        // Safety net if onFatal was missed. Never fires while the widget is
+        // interactive — that means it is healthy and waiting on the user.
+        const widget = turnstileWidget;
         void (async () => {
-          const token = await turnstileWidget.waitForToken(10000);
-          if (!token && captchaMode === 'turnstile') {
+          const token = await widget.waitForToken(45000);
+          if (!token && captchaMode === 'turnstile' && widget === turnstileWidget
+              && !widget.isInteractive()) {
             await fallbackToPow('wait-timeout');
           }
         })();
@@ -164,24 +159,6 @@ export function renderLogin(app, api, navigate) {
         powStatus.innerHTML = '<span class="pow-icon">✕</span><span>验证失败，请刷新重试</span>';
         powStatus.className = 'pow-status error';
       }
-    }
-  }
-
-  async function probeTurnstileHost() {
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 4000);
-      // api.js is CORS-friendly enough for a no-cors/opaque fetch; we only care that it is reachable.
-      await fetch('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit', {
-        method: 'GET',
-        mode: 'no-cors',
-        cache: 'no-store',
-        signal: ctrl.signal,
-      });
-      clearTimeout(t);
-      return true;
-    } catch {
-      return false;
     }
   }
 
@@ -230,9 +207,17 @@ export function renderLogin(app, api, navigate) {
       }
       turnstileToken = turnstileWidget?.getToken() || null;
       if (!turnstileToken && turnstileWidget) {
+        if (turnstileWidget.isInteractive()) {
+          showError('请先完成上方的人机验证');
+          return;
+        }
         turnstileToken = await turnstileWidget.waitForToken(8000);
       }
       if (!turnstileToken) {
+        if (turnstileWidget?.isInteractive()) {
+          showError('请先完成上方的人机验证');
+          return;
+        }
         // Last resort: switch to PoW instead of trapping the user
         try {
           await fallbackToPow('submit-no-token');

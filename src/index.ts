@@ -20,7 +20,6 @@ import { cors } from "hono/cors";
 import { initializeLucia } from "./lib/auth";
 import { generateId } from "./lib/password";
 import { verifyPKCE, validateCodeChallenge, validateCodeVerifier } from "./lib/pkce";
-import { verifyTurnstile } from "./lib/turnstile";
 import { issueTokens, validateAccessToken, refreshAccessToken, revokeRefreshToken, revokeAllUserTokens } from "./lib/tokens";
 import { validateScopeParameter, formatScopes, filterUserData, SCOPES, hasScopes } from "./lib/scope";
 import { isOIDCRequest } from "./lib/oidc-scope";

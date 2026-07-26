@@ -27,15 +27,6 @@ export type TurnstileVerifyResult = {
  * multi-value X-Forwarded-For mismatches are a common cause of
  * "first attempt fails, refresh works" for otherwise-valid tokens.
  */
-export async function verifyTurnstile(
-  token: string,
-  secretKey: string,
-  _remoteIp?: string
-): Promise<boolean> {
-  const result = await verifyTurnstileDetailed(token, secretKey);
-  return result.success;
-}
-
 export async function verifyTurnstileDetailed(
   token: string,
   secretKey: string

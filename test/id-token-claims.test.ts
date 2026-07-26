@@ -20,11 +20,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { buildIDTokenClaims, EMAIL_VERIFIED } from '../src/lib/id-token.ts';
-
-const root = join(import.meta.dirname, '..');
+import { buildIDTokenClaims, EMAIL_VERIFIED, ACR } from '../src/lib/id-token.ts';
 import { isOIDCRequest, getClaimsForScope, validateOIDCScope } from '../src/lib/oidc-scope.ts';
 import { filterUserData } from '../src/lib/scope.ts';
+
+const root = join(import.meta.dirname, '..');
 
 const user = {
   id: 'u1',
@@ -203,6 +203,49 @@ describe('按 scope 披露用户字段', () => {
         'schema 里出现了邮箱验证字段 —— 说明验证流程做了，' +
           'EMAIL_VERIFIED 应当改成按用户读取，而不是继续写死 false',
       );
+    });
+  });
+
+  describe('acr 不得声称我们没有的身份保障等级', () => {
+    /*
+     * 与 email_verified 同一类问题。此前无条件发
+     * `urn:mace:incommon:iap:silver` —— 而 InCommon 的 Silver 是一套
+     * **有具体要求**的等级：身份核验（比对政府证件或等效手段）、凭据强度与
+     * 生命周期规定、可审计。
+     *
+     * 本服务是自助注册 + 一个连确认信都不发的邮箱 + 一个密码。
+     *
+     * OIDC Core §2：值 "0" 表示未达到 ISO/IEC 29115 level 1。
+     */
+
+    test('发的是 "0"', () => {
+      assert.equal(build('openid profile email').acr, '0');
+      assert.equal(ACR, '0');
+    });
+
+    test('赋值处用常量，不写死字面量', () => {
+      const src = readFileSync(join(root, 'src/lib/id-token.ts'), 'utf8');
+      for (const m of src.matchAll(/^[^\n/*]*claims\.acr\s*=\s*([^;]+);/gm)) {
+        assert.equal(m[1].trim(), 'ACR', `acr 被赋成了 ${m[1].trim()}`);
+      }
+    });
+
+    test('amr 仍然是 pwd —— 那一条本来就是准确的', () => {
+      // 不该因为「acr 说错了」就把旁边正确的那条一起改掉
+      assert.deepEqual(build('openid').amr, ['pwd']);
+    });
+
+    test('文档里的 acr 示例与代码一致', () => {
+      const doc = readFileSync(join(root, 'docs/features/oidc/implementation.md'), 'utf8');
+      for (const m of doc.matchAll(/"acr":\s*"([^"]*)"/g)) {
+        assert.equal(m[1], ACR, `文档写着 "acr": "${m[1]}"，代码发的是 "${ACR}"`);
+      }
+    });
+
+    test('文档说清了什么时候可以改', () => {
+      // 「以后想发别的值该满足什么条件」不写下来的话，下次有人直接改常量
+      const doc = readFileSync(join(root, 'docs/features/oidc/implementation.md'), 'utf8');
+      assert.match(doc, /acr_values_supported/, '没写「改了要在 discovery 里声明」');
     });
   });
 

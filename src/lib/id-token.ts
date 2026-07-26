@@ -46,6 +46,34 @@ import { SCOPES, hasScopes } from "./scope.ts";
  */
 export const EMAIL_VERIFIED = false;
 
+/**
+ * `acr`（Authentication Context Class Reference）的值。
+ *
+ * ── 为什么不是 InCommon Silver ────────────────────────────────────
+ *
+ * 这里此前无条件发 `urn:mace:incommon:iap:silver`。
+ *
+ * InCommon 的 Identity Assurance Profile「Silver」不是一个形容词，是一套
+ * **有具体要求**的等级：要求对申请人做身份核验（比对政府证件或等效手段）、
+ * 对凭据强度与生命周期有规定、还要可审计。
+ *
+ * 本服务的实际情况是：自助注册，填一个**连确认信都不发**的邮箱，加一个密码。
+ * 这离 Silver 差得很远 —— 发这个值等于替一套我们没有的流程背书。
+ *
+ * OIDC Core §2 对 `acr` 的说明里给了确切的写法：
+ *
+ *   > The value "0" indicates the End-User authentication did not meet the
+ *   > requirements of ISO/IEC 29115 level 1.
+ *
+ * 自助注册 + 未验证邮箱正是这种情况，所以发 `"0"`。
+ *
+ * `amr: ["pwd"]` 保持不变 —— 那一条是**准确**的：确实是密码认证。
+ *
+ * 什么时候能改：真的做了身份核验（或至少邮箱验证 + MFA）之后，
+ * 按实际达到的等级发，并在 discovery 里声明 `acr_values_supported`。
+ */
+export const ACR = "0";
+
 export interface IDTokenClaims {
   // Required claims
   iss: string;
@@ -112,7 +140,7 @@ export function buildIDTokenClaims(
   }
 
   // Add authentication context
-  claims.acr = "urn:mace:incommon:iap:silver";
+  claims.acr = ACR;
   claims.amr = ["pwd"]; // Password authentication
 
   return claims;

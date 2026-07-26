@@ -39,10 +39,88 @@ const hexOf = (triplet: string): string =>
     .map((n) => Number(n).toString(16).padStart(2, '0'))
     .join('');
 
+/**
+ * 取某个选择器块里定义的全部 `--name: value`。
+ *
+ * `from` 是起始偏移量，必须给对：文件里有**四个** `:root {`
+ * （primitives 一个、contract 一个、两个 world 各一个）。第一版没带偏移，
+ * 结果 `:root` 永远匹配到 primitives 那块 —— 里面一个颜色 token 都没有，
+ * 于是下面那条"兜底与 world-system 一致"的比对全程空转。
+ * 反向验证时改坏 world-system 的取值，测试照样全绿，才发现。
+ */
+function blockTokens(css: string, selector: string, from = 0): Map<string, string> {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = new RegExp(`(?:^|\\n)[^\\n{}]*${escaped}[^\\n{}]*\\{([\\s\\S]*?)\\n\\}`).exec(
+    css.slice(from),
+  );
+  const out = new Map<string, string>();
+  if (!m) return out;
+  for (const d of m[1].matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)) {
+    out.set(d[1], d[2].trim().replace(/\s*\/\*[\s\S]*$/, '').trim());
+  }
+  return out;
+}
+
+/** 某一层的起始偏移。 */
+function layerAt(marker: string): number {
+  const at = tokens.indexOf(marker);
+  assert.ok(at > 0, `token 文件里找不到 ${marker}`);
+  return at;
+}
+
 describe('vendored 的 token 文件', () => {
-  test('两层都在：primitives 与 contract', () => {
+  test('四层都在：primitives / contract / 两个 world', () => {
     assert.match(tokens, /Layer 0: Primitives/);
     assert.match(tokens, /Layer 1: The semantic contract/);
+    assert.match(tokens, /World: SYSTEM/i);
+    assert.match(tokens, /World: NIGHT/i);
+  });
+
+  test('记了上游的 commit —— 不然没法判断同步到了哪一版', () => {
+    assert.match(tokens, /sekai-design @ [0-9a-f]{7,}/);
+  });
+
+  test('两个 world 都是类作用域', () => {
+    /*
+     * world-night 排在 world-system 之后加载。它要是写成裸 :root，
+     * 本仓（world-system）就会被整个盖掉 —— 而且不会有任何报错，
+     * 只是颜色全变了。
+     *
+     * 判据：从每个 world 的标题注释往下，遇到的第一个选择器必须带 class。
+     */
+    for (const world of ['SYSTEM', 'NIGHT']) {
+      const at = tokens.indexOf(`World: ${world}`);
+      assert.ok(at > 0, `找不到 World: ${world}`);
+      const selector = /\n([^\n{}]+)\{/.exec(tokens.slice(at))?.[1] ?? '';
+      assert.match(
+        selector,
+        /\.world-(system|night)/,
+        `World: ${world} 的第一个选择器不是类作用域：${selector.trim()}`,
+      );
+    }
+  });
+
+  test('contract 的 :root 兜底与 world-system 逐项一致', () => {
+    /*
+     * contract 的 :root 是"没挂任何 world class 时"的取值，注释里写明
+     * 它就是 world-system。两者一旦分叉，同一个页面加不加
+     * class="world-system" 会渲染成两个样子，而且不会有任何报错。
+     */
+    const fallback = blockTokens(tokens, ':root', layerAt('Layer 1: The semantic contract'));
+    const system = blockTokens(tokens, ':root.world-system', layerAt('World: SYSTEM'));
+
+    // 先确认两边都真的解析出东西了 —— 解析空了的话下面的比对就是空转
+    assert.ok(fallback.has('sekai-accent'), 'contract 的 :root 没解析出调色板');
+    assert.ok(system.size > 10, `world-system 块只解析出 ${system.size} 个 token`);
+    assert.ok(system.has('sekai-accent'), 'world-system 块没解析出 --sekai-accent');
+
+    const shared = [...system.keys()].filter((k) => fallback.has(k));
+    assert.ok(shared.length > 10, `两边只有 ${shared.length} 个同名 token，比对不成立`);
+
+    const mismatched = shared
+      .filter((k) => fallback.get(k) !== system.get(k))
+      .map((k) => `--${k}: 兜底 ${fallback.get(k)} ≠ world-system ${system.get(k)}`);
+    assert.deepEqual(mismatched, []);
   });
 
   test('注明了出处，并说明不要就地改值', () => {

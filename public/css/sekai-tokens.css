@@ -2,17 +2,25 @@
 /* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
 
 /* ============================================================
-   VENDORED — 逐字来自 sekai-design/tokens/
-     Layer 0  primitives.css
-     Layer 1  contract.css
+   VENDORED —— sekai-design/tokens/，与上游 tokens/index.css 同样的四层：
+     Layer 0  primitives.css      世界无关的原始刻度
+     Layer 1  contract.css        语义契约（:root 的兜底就是 world-system）
+     Layer 2  world-system.css    .world-system
+     Layer 2  world-night.css     .world-night
 
-   **不要在这里改任何值。** 要改就改 sekai-design，再同步过来。
+   sekai-design @ cbbb0ec
+
+   **不要在这里改任何值。** 要改就改 sekai-design，再整体同步过来。
    一份设计系统被各仓各改一点，就退化成了各仓各有一份 ——
    这正是本生态在 auth 客户端上已经踩过的坑（五份漂移的实现）。
 
-   sekai-design 目前还不是一个 git 仓库，所以没法接
-   .github/scripts/static-check.mjs 的 @sekai-vendor 漂移检查
-   （那个机制要从上游 tag 拉原文比对）。等它成仓之后应当补上。
+   两个 world 都收进来（而不是只留 world-system），是为了让这个文件
+   与上游逐字可比：等 sekai-design 推上 GitHub 打了 tag，
+   .github/scripts/static-check.mjs 的漂移检查就能直接拉原文比对。
+   只 vendored 一部分的话，那个比对做不了。
+
+   本仓是 world-system。两个 world 都是类作用域，默认走 :root 兜底，
+   所以不加任何 class 时的表现就是 world-system。
    ============================================================ */
 
 /* ============================================================
@@ -276,4 +284,112 @@
   --sekai-device-fg-dim: 80 80 80;
   --sekai-device-key: 51 51 51;
   --sekai-device-key-hover: 68 68 68;
+}
+
+/* ============================================================
+   World: SYSTEM  —  derived from sekai-pass
+   ------------------------------------------------------------
+   Register: terminal. Near-black field, low chroma, solid grey
+   hairlines, tight radii, the mono voice used liberally.
+   Use for: SEKAI Pass, hub, docs, dashboards, anything that
+   should read as infrastructure.
+   ============================================================ */
+
+.world-system,
+:root.world-system {
+  /* Canvas — ascends lighter */
+  --sekai-canvas: 11 11 14; /* #0b0b0e */
+  --sekai-surface: 23 23 28; /* #17171c */
+  --sekai-surface-raised: 32 32 37; /* #202025 */
+  --sekai-surface-sunken: 17 17 20; /* #111114 */
+  --sekai-surface-hover: 42 42 48; /* #2a2a30 */
+
+  /* Lines — solid grey; divider is the same grey as the hairline */
+  --sekai-line: 42 42 48; /* #2a2a30 */
+  --sekai-line-a: 1;
+  --sekai-line-strong: 61 61 70;
+  --sekai-line-strong-a: 1;
+  --sekai-divider: 42 42 48;
+  --sekai-divider-a: 1;
+
+  /* Foreground */
+  --sekai-fg: 226 226 230; /* #e2e2e6 */
+  --sekai-fg-muted: 117 117 122; /* #75757a */
+  --sekai-fg-subtle: 90 90 96;
+  --sekai-fg-on-accent: 26 26 30; /* #1a1a1e — dark text on light accent */
+
+  /* Accent — Pass violet */
+  --sekai-accent: 164 140 214; /* #a48cd6 */
+  --sekai-accent-hover: 189 166 232; /* #bda6e8 */
+  --sekai-accent-deep: 89 68 131; /* #594483 */
+  --sekai-accent-fill: 164 140 214;
+
+  /* Scrim */
+  --sekai-scrim: 20 20 25;
+  --sekai-scrim-a: 0.92;
+
+  /* Radius register: this world prefers the tight end of the scale. */
+  --sekai-radius-control: var(--sekai-radius-xs); /* 4px */
+  --sekai-radius-panel: var(--sekai-radius-md); /* 8px */
+
+  /* Control voice: machine. */
+  --sekai-control-transform: uppercase;
+  --sekai-control-tracking: var(--sekai-tracking-wider);
+  --sekai-control-weight: var(--sekai-weight-bold);
+}
+
+/* ============================================================
+   World: NIGHT  —  derived from nightcord
+   ------------------------------------------------------------
+   Register: ambient. Violet field, mid chroma, white-at-low-alpha
+   hairlines, softer radii, the mono voice reserved for meta.
+   Use for: nightcord, 25ji-sagyo, stickers — anything the user
+   sits inside for a long time.
+   ============================================================ */
+
+.world-night,
+:root.world-night {
+  /* Canvas — descends darker as it rises. Elevation is carried by
+     shadow and hairline, not by fill lightness. */
+  --sekai-canvas: 80 71 106; /* #50476a */
+  --sekai-surface: 63 53 91; /* #3f355b — sidebar, composer */
+  --sekai-surface-raised: 43 38 51; /* #2b2633 — modals, attachments */
+  --sekai-surface-sunken: 30 27 36; /* #1e1b24 — inputs, wells */
+  --sekai-surface-hover: 61 55 80; /* #3d3750 */
+
+  /* Lines — hairlines are white at low alpha; structural dividers are
+     the dark plum bar-rule. These genuinely differ here. */
+  --sekai-line: 255 255 255;
+  --sekai-line-a: 0.08;
+  --sekai-line-strong: 255 255 255;
+  --sekai-line-strong-a: 0.2;
+  --sekai-divider: 43 38 51; /* #2b2633 */
+  --sekai-divider-a: 1;
+
+  /* Foreground */
+  --sekai-fg: 255 255 255;
+  --sekai-fg-muted: 189 189 189; /* #bdbdbd */
+  --sekai-fg-subtle: 136 136 136; /* #888 */
+  --sekai-fg-on-accent: 255 255 255; /* white text on the deep accent */
+
+  /* Accent — nightcord violet. Same two roles as world-system:
+     `accent` is the bright interactive one (#a78bfa), `accent-deep`
+     is the structural strip colour (#7c6fac). */
+  --sekai-accent: 167 139 250; /* #a78bfa */
+  --sekai-accent-hover: 196 181 253; /* #c4b5fd */
+  --sekai-accent-deep: 124 111 172; /* #7c6fac */
+  --sekai-accent-fill: 124 111 172; /* fills use the deeper one */
+
+  /* Scrim */
+  --sekai-scrim: 20 20 25;
+  --sekai-scrim-a: 0.92;
+
+  /* Radius register: this world prefers the softer end. */
+  --sekai-radius-control: var(--sekai-radius-sm); /* 6px */
+  --sekai-radius-panel: var(--sekai-radius-md); /* 8px */
+
+  /* Control voice: human. The mono voice stays on meta and labels. */
+  --sekai-control-transform: none;
+  --sekai-control-tracking: var(--sekai-tracking-none);
+  --sekai-control-weight: var(--sekai-weight-semibold);
 }

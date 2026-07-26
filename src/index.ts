@@ -24,7 +24,10 @@ import { issueTokens, validateAccessToken, refreshAccessToken, revokeRefreshToke
 import { validateScopeParameter, formatScopes, filterUserData, SCOPES, hasScopes } from "./lib/scope.ts";
 import { isOIDCRequest } from "./lib/oidc-scope.ts";
 import { generateIDToken, EMAIL_VERIFIED } from "./lib/id-token.ts";
-import { generateOIDCMetadata } from "./lib/oidc-discovery.ts";
+import {
+  generateOIDCMetadata,
+  generateAuthorizationServerMetadata
+} from "./lib/oidc-discovery.ts";
 import { getPublicKeys, checkAndRotateKeys } from "./lib/keys.ts";
 import { authenticateClient } from "./lib/client-auth.ts";
 import * as html from "./lib/html.ts";
@@ -220,26 +223,7 @@ app.use("/oauth/*", async (c, next) => {
 // OAuth Discovery Endpoint (RFC 8414)
 app.get("/.well-known/oauth-authorization-server", async (c) => {
   const baseUrl = new URL(c.req.url).origin;
-
-  return c.json({
-    issuer: baseUrl,
-    authorization_endpoint: `${baseUrl}/oauth/authorize`,
-    token_endpoint: `${baseUrl}/oauth/token`,
-    userinfo_endpoint: `${baseUrl}/oauth/userinfo`,
-    revocation_endpoint: `${baseUrl}/oauth/revoke`,
-    response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
-    code_challenge_methods_supported: ["S256"],
-    token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
-    token_endpoint_auth_signing_alg_values_supported: ["ES256", "RS256"],
-    revocation_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: Object.values(SCOPES),
-    service_documentation: `${baseUrl}/docs`,
-    ui_locales_supported: ["zh-CN", "en-US"],
-    // OAuth 2.1: PKCE is mandatory
-    require_pushed_authorization_requests: false,
-    require_request_uri_registration: false
-  });
+  return c.json(generateAuthorizationServerMetadata(baseUrl));
 });
 
 // OpenID Connect Discovery Endpoint

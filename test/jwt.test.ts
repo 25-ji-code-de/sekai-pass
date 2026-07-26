@@ -133,8 +133,20 @@ describe('篡改检测', () => {
   test('改签名后验签失败', async () => {
     const token = await signJWT(claims(), esPrivate, 'kid-1');
     const [h, p, s] = token.split('.');
-    const flipped = s.slice(0, -1) + (s.endsWith('A') ? 'B' : 'A');
+    // 必须改**首**字符：base64url 的最后一个字符往往只携带 2 个有效 bit，
+    // 改它有相当概率解码出完全相同的字节，签名依然有效 —— 那样测试就是间歇性的。
+    const flipped = (s[0] === 'A' ? 'B' : 'A') + s.slice(1);
+    assert.notEqual(flipped, s, '构造的篡改签名必须真的不同');
     assert.equal(await verifyJWT(`${h}.${p}.${flipped}`, esPublic), false);
+  });
+
+  test('改签名后验签失败 —— 重复多次以排除偶然', async () => {
+    for (let i = 0; i < 20; i++) {
+      const token = await signJWT({ ...claims(), jti: String(i) }, esPrivate, 'kid-1');
+      const [h, p, s] = token.split('.');
+      const flipped = (s[0] === 'A' ? 'B' : 'A') + s.slice(1);
+      assert.equal(await verifyJWT(`${h}.${p}.${flipped}`, esPublic), false, `第 ${i} 次`);
+    }
   });
 
   test('空签名被拒', async () => {

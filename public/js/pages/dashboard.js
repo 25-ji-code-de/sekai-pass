@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { showError, setLoading } from '../utils.js';
+import { showError, setLoading, escapeHtml } from '../utils.js';
 
 export async function renderDashboard(app, api, navigate) {
   const token = localStorage.getItem('token');
@@ -37,12 +37,7 @@ export async function renderDashboard(app, api, navigate) {
     });
 
     const userInfoDiv = document.getElementById('user-info');
-    const escapeHtml = (s) => String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-
+    // 原本这里有一份本地 escapeHtml，且漏了单引号。改用 utils.js 的共享实现。
     userInfoDiv.innerHTML = `
       <p><strong>用户名</strong> <span>${escapeHtml(user.username)}</span></p>
       <p><strong>邮箱</strong> <span>${escapeHtml(user.email)}</span></p>

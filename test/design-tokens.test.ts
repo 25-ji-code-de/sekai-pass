@@ -122,6 +122,25 @@ describe('旧别名与迁移前的取值逐字相等', () => {
     assert.equal(tokenValue(styles, 'primary-color-mix'), 'var(--sekai-accent)');
   });
 
+  test('注释掉的主题示例也用 token 写 —— 不然照抄就是新造漂移点', () => {
+    // 这些块现在是注释，但它们是"下一个人写新主题时照抄的模板"。
+    // 模板里留着 hex 孪生写法，等于把已经修掉的问题埋回去。
+    const themeBlocks = [
+      /@media \(prefers-color-scheme: light\)[\s\S]*?\n\}/.exec(styles)?.[0],
+      /\.theme-leo \{[\s\S]*?\n\}/.exec(styles)?.[0],
+      /\.theme-vbs \{[\s\S]*?\n\}/.exec(styles)?.[0],
+    ];
+    for (const block of themeBlocks) {
+      assert.ok(block, '找不到主题示例块');
+      assert.ok(!/#[0-9a-f]{3,8}\b/i.test(block!), `主题示例里还有裸 hex：${block}`);
+      assert.ok(
+        !/--primary-color-mix\s*:/.test(block!),
+        '主题示例还在教人同时写 --primary-color 与 --primary-color-mix',
+      );
+      assert.match(block!, /--sekai-/, '主题示例应当改 contract token');
+    }
+  });
+
   test('每个别名都是从 token 派生的，没有漏网的 hex', () => {
     const block = /:root\s*\{([\s\S]*?)\}/.exec(styles)?.[1] ?? '';
     assert.ok(block, '找不到 :root 块');

@@ -23,12 +23,25 @@
 
 ### 创建 OAuth 应用
 
-**方法：使用数据库（当前方法）**
+**在开放平台自助注册**
 
-由于应用管理 UI 正在开发中，需要直接在数据库中注册应用：
+登录 SEKAI Pass 后打开 `/apps`，填应用名与回调地址，客户端类型选
+「公开客户端（PKCE）」。创建后立刻拿到 `client_id`。
+
+> [!IMPORTANT]
+> **没有 `client_secret`。** 本服务的
+> `token_endpoint_auth_methods_supported` 只有 `none` 与
+> `private_key_jwt`，令牌端点从不读 `client_secret`。
+>
+> 需要机密客户端的话，类型选 `private_key_jwt`，再在应用卡片上点
+> 「管理公钥」登记公钥 —— **登记之前那个应用取不到 token**。
+
+<details>
+<summary>开放平台上线之前的老办法（手工插库）</summary>
+
+以前只能直接往 D1 里 INSERT。留在这里是因为旧文档和旧笔记里可能还有：
 
 ```bash
-# 本地开发环境
 npx wrangler d1 execute sekai_pass_db --local --command "
 INSERT INTO applications (id, name, client_id, client_secret, redirect_uris, created_at)
 VALUES (
@@ -36,16 +49,17 @@ VALUES (
   'My OIDC App',
   'client-' || hex(randomblob(12)),
   'secret-' || hex(randomblob(16)),
-  '[\"http://localhost:3000/callback\",\"https://your-app.com/callback\"]',
+  '[\"http://localhost:3000/callback\"]',
   $(date +%s)000
 )
-RETURNING client_id, client_secret;"
-
-# 生产环境（使用 --remote 替换 --local）
-npx wrangler d1 execute sekai_pass_db --remote --command "..."
+RETURNING client_id;"
 ```
 
-**重要**: 保存输出的 `client_id` 和 `client_secret` - 认证时需要使用。
+注意这条 SQL 里的 `client_secret` 只是为了满足 NOT NULL 约束，
+**没有任何认证路径会读它**。而且这样建出来的应用没有 `owner_user_id`，
+在开放平台里看不见（OAuth 流程照常工作）。
+
+</details>
 
 ## 步骤 2: 授权请求
 

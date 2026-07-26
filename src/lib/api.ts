@@ -29,7 +29,6 @@ import {
   createApplication,
   updateApplication,
   deleteApplication,
-  rotateClientSecret,
   isAtAppLimit,
   validateApplicationInput,
   MAX_APPS_PER_USER,
@@ -754,10 +753,14 @@ apiRouter.post("/apps", async (c) => {
       );
     }
 
-    const { application, client_secret } = await createApplication(c.env.DB, user.id, body);
+    const { application } = await createApplication(c.env.DB, user.id, body);
 
-    // client_secret 只在创建时返回这一次，之后不再可读
-    return c.json({ application, client_secret }, 201, { "Cache-Control": "no-store" });
+    /*
+     * 不返回 client_secret —— 本服务不用它认证任何东西。
+     * token_endpoint_auth_methods_supported 只有 none 与 private_key_jwt。
+     * 选了 private_key_jwt 的应用，下一步是去 /apps/:clientId/keys 登记公钥。
+     */
+    return c.json({ application }, 201, { "Cache-Control": "no-store" });
   } catch (error) {
     console.error("Create application error:", error);
     return c.json({ error: "创建应用失败" }, 500);
@@ -819,20 +822,13 @@ apiRouter.delete("/apps/:clientId", async (c) => {
   }
 });
 
-// 轮换 client_secret
-apiRouter.post("/apps/:clientId/rotate-secret", async (c) => {
-  const user = requireUser(c);
-  if (!user) return c.json({ error: "未授权" }, 401);
-
-  try {
-    const secret = await rotateClientSecret(c.env.DB, c.req.param("clientId"), user.id);
-    if (!secret) return c.json({ error: "not_found" }, 404);
-    return c.json({ client_secret: secret }, 200, { "Cache-Control": "no-store" });
-  } catch (error) {
-    console.error("Rotate secret error:", error);
-    return c.json({ error: "轮换密钥失败" }, 500);
-  }
-});
+/*
+ * 这里原本有 POST /apps/:clientId/rotate-secret。删掉了。
+ *
+ * 轮换一个不认证任何东西的值，只会让人以为自己刚做了一次安全操作。
+ * private_key_jwt 的密钥轮换是真的有意义的，见下面的 /keys 接口：
+ * 登记新公钥 → 客户端换用新私钥 → 撤销旧公钥，三步零停机。
+ */
 
 /* ═══════════════════════════════════════════════════════════════════
  *  private_key_jwt 公钥管理

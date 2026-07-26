@@ -102,6 +102,57 @@ function parseRedirectUris(redirectUris: string): string[] {
   }
 }
 
+/**
+ * 安全响应头。
+ *
+ * 本仓是 Worker 不是 Pages，没有 _headers 文件 —— 在这次加上之前，
+ * **整个 SSO 一个安全头都没有**。授权同意页因此可以被 iframe 嵌套，
+ * 攻击者可以透明覆盖诱导用户点「允许访问」（点击劫持）。
+ *
+ * 分两条推进，与四个静态站的做法一致：
+ *   Content-Security-Policy            —— 只放零破坏风险的指令，强制生效
+ *   Content-Security-Policy-Report-Only —— 完整策略，先收集违规数据
+ *
+ * index.html（SPA 入口）没有任何内联 script/style，所以完整策略里
+ * script-src 不需要 'unsafe-inline'；docs.html 有内联，Report-Only
+ * 阶段会把它报出来，届时再决定是外置还是给 docs 单独放宽。
+ */
+const CSP_ENFORCED = [
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+const CSP_REPORT_ONLY = [
+  "default-src 'self'",
+  // Turnstile 的脚本与它注入的挑战 iframe
+  "script-src 'self' https://challenges.cloudflare.com",
+  "frame-src https://challenges.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  // 头像来自对象存储
+  "img-src 'self' data: https://assets.nightcord.de5.net https://storage.nightcord.de5.net https://r2.nightcord.de5.net",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+app.use("*", async (c, next) => {
+  await next();
+
+  // 点击劫持防护 —— 对同意页尤其关键，它一个误点就等于批准了授权
+  c.header("X-Frame-Options", "DENY");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+  // 不带 includeSubDomains：只约束本主机，避免影响其它 *.nightcord.de5.net
+  c.header("Strict-Transport-Security", "max-age=31536000");
+  c.header("Content-Security-Policy", CSP_ENFORCED);
+  c.header("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY);
+});
+
 // CORS middleware for API and OAuth endpoints
 app.use("/api/*", cors({
   origin: "*",

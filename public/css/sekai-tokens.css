@@ -1,0 +1,279 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
+
+/* ============================================================
+   VENDORED — 逐字来自 sekai-design/tokens/
+     Layer 0  primitives.css
+     Layer 1  contract.css
+
+   **不要在这里改任何值。** 要改就改 sekai-design，再同步过来。
+   一份设计系统被各仓各改一点，就退化成了各仓各有一份 ——
+   这正是本生态在 auth 客户端上已经踩过的坑（五份漂移的实现）。
+
+   sekai-design 目前还不是一个 git 仓库，所以没法接
+   .github/scripts/static-check.mjs 的 @sekai-vendor 漂移检查
+   （那个机制要从上游 tag 拉原文比对）。等它成仓之后应当补上。
+   ============================================================ */
+
+/* ============================================================
+   SEKAI Design System — Layer 0: Primitives
+   ------------------------------------------------------------
+   World-independent. Nothing here changes between world-system
+   and world-night. Values are the union of the scales actually
+   observed in nightcord/styles.css and sekai-pass/public/css.
+   ============================================================ */
+
+:root {
+  /* ---------- Type families ----------
+     sans  = content voice
+     mono  = MACHINE VOICE. Labels, IDs, sizes, timecodes, status,
+             code. This split is the single strongest signature of
+             both source designs — see DESIGN_SYSTEM.md §2.        */
+  --sekai-font-sans:
+    "Inter", "Noto Sans JP", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --sekai-font-mono:
+    "JetBrains Mono", "Cascadia Code", "Fira Code", "Menlo", "Monaco",
+    "Consolas", "Noto Sans Mono", monospace;
+
+  /* ---------- Type scale ---------- */
+  --sekai-text-micro: 10px; /* mono signatures, entity labels, scope tags */
+  --sekai-text-meta: 11px; /* hints, privacy notes, scrub time */
+  --sekai-text-label: 12px; /* form labels, badges, timestamps */
+  --sekai-text-sm: 13px; /* subtitles, scope names, inline errors */
+  --sekai-text-md: 14px; /* Pass body */
+  --sekai-text-lg: 15px; /* Nightcord message body + composer */
+  --sekai-text-xl: 18px; /* card / auth titles */
+  --sekai-text-2xl: 20px;
+  --sekai-text-3xl: 24px; /* modal headings */
+  --sekai-text-4xl: 32px; /* avatar initials */
+
+  --sekai-weight-normal: 400;
+  --sekai-weight-medium: 500;
+  --sekai-weight-semibold: 600;
+  --sekai-weight-bold: 700;
+
+  --sekai-leading-none: 1;
+  --sekai-leading-tight: 1.4;
+  --sekai-leading: 1.5;
+  --sekai-leading-relaxed: 1.6;
+
+  /* Tracking is how the mono voice reads as "machine". Never apply
+     wide tracking to sans body copy. */
+  --sekai-tracking-tight: -0.01em;
+  --sekai-tracking-none: 0;
+  --sekai-tracking-wide: 0.5px;
+  --sekai-tracking-wider: 1px;
+  --sekai-tracking-widest: 2px;
+
+  /* ---------- Spacing ---------- */
+  --sekai-space-3xs: 2px;
+  --sekai-space-2xs: 4px;
+  --sekai-space-xs: 6px;
+  --sekai-space-sm: 8px;
+  --sekai-space-md: 12px;
+  --sekai-space-lg: 16px;
+  --sekai-space-xl: 20px;
+  --sekai-space-2xl: 24px;
+  --sekai-space-3xl: 32px;
+  --sekai-space-4xl: 48px;
+
+  /* ---------- Radius ---------- */
+  --sekai-radius-xs: 4px; /* inputs, buttons, badges (system register) */
+  --sekai-radius-sm: 6px; /* chips, transport keys, status pills */
+  --sekai-radius-md: 8px; /* cards, code blocks */
+  --sekai-radius-lg: 12px; /* composer, toasts, modal buttons */
+  --sekai-radius-xl: 18px; /* entity avatars */
+  --sekai-radius-2xl: 24px; /* full-screen modals */
+  --sekai-radius-full: 9999px;
+
+  /* ---------- Elevation ----------
+     Surfaces are flat. Depth comes from shadow, never from a heavy
+     gradient. See DESIGN_SYSTEM.md §4. */
+  --sekai-elev-0: none;
+  --sekai-elev-1: 0 2px 4px rgb(0 0 0 / 0.2);
+  --sekai-elev-2: 0 4px 12px rgb(0 0 0 / 0.2);
+  --sekai-elev-3: 0 8px 24px rgb(0 0 0 / 0.3);
+  --sekai-elev-4: 0 20px 60px rgb(0 0 0 / 0.5); /* Pass container */
+  --sekai-elev-modal: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+  --sekai-elev-inset: inset 0 2px 4px rgb(0 0 0 / 0.2);
+
+  /* ---------- Motion ---------- */
+  --sekai-dur-instant: 0.1s;
+  --sekai-dur-fast: 0.15s;
+  --sekai-dur: 0.2s;
+  --sekai-dur-slow: 0.3s;
+  --sekai-dur-slower: 0.4s;
+
+  --sekai-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --sekai-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1); /* nightcord default */
+  --sekai-ease-spring: cubic-bezier(0.16, 1, 0.3, 1); /* entrances */
+  --sekai-ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* The canonical hover gesture: brighten the hairline, lift 1px. */
+  --sekai-lift: translateY(-1px);
+  --sekai-lift-strong: translateY(-2px);
+
+  /* ---------- Neutral tints ----------
+     Complete colors, not triplets. World-independent additive
+     overlays. Use these when you need "a bit lighter / darker than
+     whatever is underneath" rather than a named surface. */
+  --sekai-tint-hover: rgb(255 255 255 / 0.05);
+  --sekai-tint-active: rgb(255 255 255 / 0.08);
+  --sekai-tint-raised: rgb(255 255 255 / 0.02);
+  --sekai-tint-sunken: rgb(0 0 0 / 0.2);
+  --sekai-tint-scrim: rgb(0 0 0 / 0.25);
+
+  /* ---------- Z ladder ---------- */
+  --sekai-z-base: 0;
+  --sekai-z-raised: 10;
+  --sekai-z-sticky: 100;
+  --sekai-z-overlay: 999;
+  --sekai-z-modal: 1000;
+  --sekai-z-toast: 9999;
+  --sekai-z-viewer: 99999;
+
+  /* ---------- Layout constants ---------- */
+  --sekai-sidebar-width: 280px;
+  --sekai-bar-height: 48px; /* server header / chat header */
+  --sekai-sticker-size: 120px;
+}
+
+@media screen and (max-width: 480px) {
+  :root {
+    --sekai-sticker-size: 80px;
+  }
+}
+
+/* ============================================================
+   SEKAI Design System — Layer 1: The semantic contract
+   ------------------------------------------------------------
+   Every world MUST define every token in this file. Component CSS
+   is only ever allowed to reference these names — never a world
+   file, never a raw hex.
+
+   COLOR RULE (one rule, no exceptions):
+     Palette tokens hold a SPACE-SEPARATED RGB TRIPLET and are
+     always consumed as  rgb(var(--sekai-x) / <alpha>).
+     There are no hex twins. This is deliberate: sekai-pass's own
+     CSS_REFACTOR_PLAN.md documents --error-color drifting between
+     `#e57373` and `229 115 115` because two spellings existed.
+     One spelling cannot drift.
+
+   Two companions to that rule:
+     --sekai-*-a          a bare number, the world's default alpha
+                          for that role (line, scrim).
+     --sekai-hairline*    a ready-made `1px solid rgb(...)` shorthand,
+                          because it appears ~50 times and every
+                          hand-written copy is a chance to drift.
+   ============================================================ */
+
+:root {
+  /* Fallback world = world-system. Attaching .world-system or
+     .world-night to <html>/<body> overrides these wholesale. */
+
+  /* ---------- Canvas ladder ----------
+     Defined by ROLE, not by lightness direction. world-system climbs
+     lighter as it rises (#0b0b0e -> #17171c -> #202025); world-night
+     climbs *darker* (#50476a -> #3f355b -> #2b2633). Both are internally
+     consistent, and both read as "raised" because elevation in this
+     system comes from shadow + hairline, not from fill lightness. */
+  --sekai-canvas: 11 11 14; /* page field */
+  --sekai-surface: 23 23 28; /* default panel sitting on the canvas */
+  --sekai-surface-raised: 32 32 37; /* a plane above --sekai-surface */
+  --sekai-surface-sunken: 17 17 20; /* a well: inputs, code, tracks */
+  --sekai-surface-hover: 42 42 48; /* solid hover fill */
+
+  /* ---------- Lines ----------
+     Three jobs, not one:
+       line      hairline around cards, inputs, chips
+       strong    the same hairline, emphasized (hover / focus-adjacent)
+       divider   structural rules between layout regions (bar bottoms,
+                 sidebar edges). world-system draws these with the same
+                 grey as `line`; world-night draws them dark while its
+                 `line` is white-at-low-alpha. Collapsing the two would
+                 make one of the worlds wrong. */
+  --sekai-line: 42 42 48;
+  --sekai-line-a: 1;
+  --sekai-line-strong: 61 61 70;
+  --sekai-line-strong-a: 1;
+  --sekai-divider: 42 42 48;
+  --sekai-divider-a: 1;
+
+  /* ---------- Foreground ---------- */
+  --sekai-fg: 226 226 230;
+  --sekai-fg-muted: 117 117 122;
+  --sekai-fg-subtle: 90 90 96;
+  --sekai-fg-on-accent: 26 26 30; /* text sitting ON an accent fill */
+
+  /* ---------- Accent ----------
+     Two accents, two jobs — this is the shared shape both source
+     designs already had:
+       accent      bright, interactive: focus rings, icons, CTAs
+       accent-deep structural: the 3-4px strips, gradient caps      */
+  --sekai-accent: 164 140 214;
+  --sekai-accent-hover: 189 166 232;
+  --sekai-accent-deep: 89 68 131;
+
+  /* Which accent a SOLID fill uses, and what colour survives on top of
+     it. These differ per world because the worlds' accents differ in
+     lightness: world-system fills with its light accent and sets dark
+     text (Pass's own `--button-color: #1a1a1e`); world-night fills with
+     the deeper accent and sets white (nightcord's own .sekai-update-btn).
+     Both land on legible contrast; neither is a compromise. */
+  --sekai-accent-fill: 164 140 214;
+
+  /* ---------- Signal & semantics ----------
+     Identical across worlds on purpose: a system whose "danger"
+     changes hue per theme is two systems. */
+  --sekai-signal: 255 85 0; /* live / recording / AI. Never decorative. */
+  --sekai-danger: 229 115 115;
+  --sekai-success: 129 199 132;
+  --sekai-warning: 250 166 26;
+  --sekai-info: 56 189 248;
+
+  /* ---------- Scrim ---------- */
+  --sekai-scrim: 20 20 25;
+  --sekai-scrim-a: 0.92;
+
+  /* ---------- Radius register ----------
+     The one non-colour thing a world is allowed to re-point. Controls
+     are 4px in the terminal register, 6px in the ambient one; panels
+     agree at 8px. Components reference these, not the raw scale, so a
+     world shifts its whole feel without touching component CSS. */
+  --sekai-radius-control: var(--sekai-radius-xs);
+  --sekai-radius-panel: var(--sekai-radius-md);
+
+  /* ---------- Control voice ----------
+     Whether buttons and tabs speak in the machine voice. Pass's
+     buttons are UPPERCASE / 700 / 1px-tracked; nightcord's are
+     sentence-case / 600. Same component, world-appropriate register —
+     this is the token that carries that difference, so no component
+     ever needs a world-specific rule. */
+  --sekai-control-transform: uppercase;
+  --sekai-control-tracking: var(--sekai-tracking-wider);
+  --sekai-control-weight: var(--sekai-weight-bold);
+
+  /* ---------- Derived shorthands ---------- */
+  --sekai-hairline: 1px solid rgb(var(--sekai-line) / var(--sekai-line-a));
+  --sekai-hairline-strong: 1px solid
+    rgb(var(--sekai-line-strong) / var(--sekai-line-strong-a));
+  --sekai-hairline-divider: 1px solid
+    rgb(var(--sekai-divider) / var(--sekai-divider-a));
+  --sekai-focus-ring: 0 0 0 2px rgb(var(--sekai-accent) / 0.15);
+  --sekai-glow-accent: 0 4px 20px rgb(var(--sekai-accent) / 0.3);
+  --sekai-glow-signal: 0 0 4px rgb(var(--sekai-signal) / 1);
+
+  /* ---------- Device sub-theme ----------
+     The walkman/DAW audio player is deliberately a FOREIGN OBJECT:
+     a physical device sitting inside the UI, not a surface of it.
+     It keeps its matte-black chassis in both worlds. Scoped to
+     .sekai-device — see DESIGN_SYSTEM.md §6.7. */
+  --sekai-device-chassis: 30 30 36; /* #1e1e24 */
+  --sekai-device-panel: 35 35 41; /* #232329 */
+  --sekai-device-screen: 10 10 12; /* #0a0a0c */
+  --sekai-device-line: 51 51 51; /* #333 */
+  --sekai-device-fg: 208 208 208;
+  --sekai-device-fg-dim: 80 80 80;
+  --sekai-device-key: 51 51 51;
+  --sekai-device-key-hover: 68 68 68;
+}

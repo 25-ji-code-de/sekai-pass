@@ -1,25 +1,36 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* ========== CSS Variables / Theme System ========== */
-/* Default theme: Dark (Niigo style) */
+/*
+ * 取值的唯一来源是 sekai-tokens.css（vendored 自 sekai-design），
+ * 本仓就是那套设计系统里的 world-system。
+ *
+ * 下面这些是**旧名字的别名**，全部从 --sekai-* 派生。存量样式还在用
+ * 它们，一次性改完 1300 行风险不划算；但派生之后两种写法不可能再各改
+ * 各的 —— CSS_REFACTOR_PLAN.md 记的第一条严重问题就是
+ * `--error-color` 在 `#e57373` 和 `229 115 115` 之间漂移，
+ * 根因正是"同一个颜色存在两种拼写"。
+ *
+ * **新写的组件样式一律直接用 --sekai-*，不要再加新的别名。**
+ */
 :root {
-  --bg-color: #0b0b0e;
+  --bg-color: rgb(var(--sekai-canvas));
   --bg-black: 0 0 0;
   --bg-white: 255 255 255;
-  --button-color: #1a1a1e;
-  --card-bg: #17171c;
-  --card-shadow: rgba(0, 0, 0, 0.5);
-  --primary-color: #a48cd6;
-  --primary-color-mix: 164 140 214;
-  --primary-hover: #bda6e8;
-  --text-main: #e2e2e6;
-  --text-muted: #75757a;
-  --border-color: #2a2a30;
-  --gradient-bg: #594483;
-  --input-bg: #111114;
-  --input-placeholder: rgba(255, 255, 255, 0.2);
-  --error-color: 229 115 115;
-  --success-color: 129 199 132;
-  --code-font: 'Menlo', 'Monaco', 'Courier New', monospace;
+  --button-color: rgb(var(--sekai-fg-on-accent));
+  --card-bg: rgb(var(--sekai-surface));
+  --card-shadow: rgb(0 0 0 / 0.5);
+  --primary-color: rgb(var(--sekai-accent));
+  --primary-color-mix: var(--sekai-accent);
+  --primary-hover: rgb(var(--sekai-accent-hover));
+  --text-main: rgb(var(--sekai-fg));
+  --text-muted: rgb(var(--sekai-fg-muted));
+  --border-color: rgb(var(--sekai-line));
+  --gradient-bg: rgb(var(--sekai-accent-deep));
+  --input-bg: rgb(var(--sekai-surface-sunken));
+  --input-placeholder: rgb(255 255 255 / 0.2);
+  --error-color: var(--sekai-danger);
+  --success-color: var(--sekai-success);
+  --code-font: var(--sekai-font-mono);
 }
 
 /* Future theme support - Light mode (placeholder) */
@@ -1263,22 +1274,28 @@ input[type="url"]:valid:not(:placeholder-shown) {
   overflow-wrap: anywhere;
 }
 
-/* private_key_jwt 的公钥列表 */
+/* ========== private_key_jwt 的公钥列表 ==========
+ *
+ * 本节直接用 sekai-design 的 contract token（--sekai-*），不走上面那批
+ * 旧别名 —— 设计系统的规则是组件样式只引用 contract 里的名字，不引用
+ * 世界文件、不写裸 hex。新写的东西按新规矩来，存量的慢慢迁。
+ */
 .key-list {
-  margin: 0.5rem 0 0;
+  margin: var(--sekai-space-sm) 0 0;
   padding: 0;
   list-style: none;
 }
 
 .key-row {
-  padding: 0.7rem 0.85rem;
-  margin-bottom: 0.6rem;
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
+  padding: var(--sekai-space-md) var(--sekai-space-lg);
+  margin-bottom: var(--sekai-space-sm);
+  background: rgb(var(--sekai-surface-sunken));
+  border: var(--sekai-hairline);
+  border-radius: var(--sekai-radius-control);
 }
 
-/* 撤销的公钥要一眼看出来是"还在但不生效" —— 保留但压暗 */
+/* 撤销的公钥要一眼看出来是"还在但不生效" —— 保留但压暗。
+   不用 --sekai-fg-subtle 改字色，因为整行（含 badge、按钮）都要退后。 */
 .key-row-revoked {
   opacity: 0.55;
 }
@@ -1286,48 +1303,50 @@ input[type="url"]:valid:not(:placeholder-shown) {
 .key-row-main {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--sekai-space-sm);
   flex-wrap: wrap;
 }
 
+/* Key ID 是机器标识符 —— 按设计系统的分工走 mono 这一路"机器嗓音" */
 .key-row-main code {
-  font-family: var(--code-font);
-  font-size: 0.82rem;
-  /* Key ID 由用户指定，最长 128 字符 —— 必须能断行 */
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-label);
+  letter-spacing: var(--sekai-tracking-none);
+  /* 由用户指定，最长 128 字符 —— 必须能断行而不是横向撑破 */
   overflow-wrap: anywhere;
   min-width: 0;
 }
 
 .key-row-meta {
-  margin-top: 0.3rem;
-  font-size: 0.76rem;
+  margin-top: var(--sekai-space-2xs);
+  font-size: var(--sekai-text-meta);
 }
 
 .key-row-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--sekai-space-sm);
   flex-wrap: wrap;
-  margin-top: 0.6rem;
+  margin-top: var(--sekai-space-md);
 }
 
 .key-row-actions button {
   width: auto;
   min-width: 80px;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.8rem;
+  padding: var(--sekai-space-xs) var(--sekai-space-md);
+  font-size: var(--sekai-text-label);
 }
 
 .app-form h4 {
-  margin: 1.5rem 0 0.5rem;
-  padding-top: 1.15rem;
-  border-top: 1px solid var(--border-color);
-  color: var(--text-main);
-  font-size: 0.95rem;
+  margin: var(--sekai-space-2xl) 0 var(--sekai-space-sm);
+  padding-top: var(--sekai-space-lg);
+  border-top: var(--sekai-hairline-divider);
+  color: rgb(var(--sekai-fg));
+  font-size: var(--sekai-text-lg);
 }
 
 .app-form textarea[spellcheck='false'] {
-  font-family: var(--code-font);
-  font-size: 0.82rem;
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-label);
 }
 
 @media (max-width: 480px) {

@@ -105,7 +105,14 @@ describe('几条不能松的底线', () => {
 });
 
 describe('文档里不再教人用 client_secret', () => {
+  /*
+   * 这份清单最初漏了两份 README —— 而它们恰恰是新人看的第一份文档，
+   * 里面那句「保存输出的 client_id 和 client_secret」正好命中下面第三条禁例。
+   * 守卫写了却没指向要守的地方，等于没写。
+   */
   const FILES = [
+    'README.md',
+    'README.en.md',
     'docs/api/examples.md',
     'docs/features/oauth/README.md',
     'docs/features/oidc/quickstart.md',
@@ -129,4 +136,45 @@ describe('文档里不再教人用 client_secret', () => {
       }
     });
   }
+});
+
+describe('文档里不再教人进库里手工注册应用', () => {
+  /*
+   * 「一直没有管理端，每次都进库里改」正是开放平台要解决的问题。
+   * 它做完之后，两份 README 还在原样教手工 INSERT —— 而且插的是一个
+   * （按开放平台的设计）认证不了任何东西的 client_secret。
+   *
+   * 文档不跟着改，等于功能没做：照着 README 走的人一样在进库里改。
+   */
+  const FILES = ['README.md', 'README.en.md'];
+
+  for (const file of FILES) {
+    test(file, () => {
+      const text = readFileSync(join(root, file), 'utf8');
+
+      assert.doesNotMatch(
+        text,
+        /INSERT INTO applications/i,
+        '还在教人手工往 applications 表里插行',
+      );
+      assert.doesNotMatch(
+        text,
+        /应用管理 UI 正在开发中/,
+        'UI 已经有了（仪表板 -> 开放平台 -> /apps）',
+      );
+      assert.match(
+        text,
+        /\/apps/,
+        '得告诉人自助管理在哪儿',
+      );
+    });
+  }
+
+  test('开放平台的入口确实存在（不能只是文档这么写）', () => {
+    // 文档说「仪表板点开放平台」，那就得真有这么个按钮和这么条路由
+    const dashboard = readFileSync(join(root, 'public/js/pages/dashboard.js'), 'utf8');
+    const app = readFileSync(join(root, 'public/js/app.js'), 'utf8');
+    assert.match(dashboard, /navigate\('\/apps'\)/, '仪表板上没有通往 /apps 的入口');
+    assert.match(app, /'\/apps':/, '路由表里没有 /apps');
+  });
 });

@@ -181,11 +181,27 @@ export async function renderApps(app, api, navigate) {
       setLoading(btn, true);
       try {
         if (isEdit) {
-          await api.put(`/apps/${encodeURIComponent(existing.client_id)}`, payload, {
+          const wasPublic = existing.token_endpoint_auth_method !== 'private_key_jwt';
+          const nowConfidential = payload.token_endpoint_auth_method === 'private_key_jwt';
+          const saved = await api.put(`/apps/${encodeURIComponent(existing.client_id)}`, payload, {
             headers: api.getAuthHeaders(),
           });
           showSuccess('已保存');
-          container.innerHTML = '';
+          /*
+           * 从 none 切到 private_key_jwt 之后，这个应用的 token 交换会立刻
+           * 开始报 `Public key not found` —— 除非已经登记过公钥。
+           *
+           * 原来这里只弹一句「已保存」就把面板擦掉，切换的人不会知道自己
+           * 刚把一个在跑的应用弄停了。创建流程有 showNextSteps 讲这件事，
+           * 编辑流程一直没有。
+           *
+           * 只在**真的没有可用公钥**时才提示：已经登记过的人不该被唠叨。
+           */
+          if (wasPublic && nowConfidential && (await hasNoActiveKey(existing.client_id))) {
+            warnMissingKey(saved?.application ?? existing);
+          } else {
+            container.innerHTML = '';
+          }
         } else {
           const created = await api.post('/apps', payload, { headers: api.getAuthHeaders() });
           // showNextSteps 写的就是这个 container。原来这里无条件
@@ -257,6 +273,51 @@ export async function renderApps(app, api, navigate) {
       }
     });
     document.getElementById('steps-done').addEventListener('click', () => {
+      container.innerHTML = '';
+    });
+  }
+
+  /**
+   * 这个应用有没有可用的公钥。
+   *
+   * 查不到就当作「没有」—— 提示一句多余的话，代价远小于让人以为一切正常
+   * 而实际上应用已经取不到 token。
+   */
+  async function hasNoActiveKey(clientId) {
+    try {
+      const data = await api.get(`/apps/${encodeURIComponent(clientId)}/keys`, {
+        headers: api.getAuthHeaders(),
+      });
+      return !(data.keys || []).some((k) => k.status === 'active');
+    } catch {
+      return true;
+    }
+  }
+
+  /** 切成机密客户端但还没有公钥时的提示。 */
+  function warnMissingKey(app) {
+    const container = document.getElementById('app-form-container');
+    container.innerHTML = `
+      <div class="app-form">
+        <h3>已切换为机密客户端</h3>
+        <p class="warn-text">
+          这个应用现在用 <code>private_key_jwt</code> 认证，但<strong>还没有登记任何公钥</strong>。
+          在登记之前，它<strong>取不到 token</strong> —— 正在用它登录的用户会立刻失败。
+        </p>
+        <p class="field-hint">
+          密钥对由你自己生成，私钥不要交给我们；这里只登记公钥。
+        </p>
+        <div class="form-actions">
+          <button id="warn-goto-keys">去登记公钥</button>
+          <button id="warn-dismiss" class="btn-secondary">稍后再说</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('warn-goto-keys').addEventListener('click', () => {
+      showKeys(app);
+    });
+    document.getElementById('warn-dismiss').addEventListener('click', () => {
       container.innerHTML = '';
     });
   }

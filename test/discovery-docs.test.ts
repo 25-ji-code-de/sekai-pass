@@ -24,19 +24,28 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { generateOIDCMetadata } from '../src/lib/oidc-discovery.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const source = readFileSync(join(root, 'src/index.ts'), 'utf8');
 const doc = readFileSync(join(root, 'docs/api/discovery.md'), 'utf8');
 
-/** 从 src/index.ts 里读一个字符串数组字段。 */
+/*
+ * 真值取自**真的调一次生成函数**，不再用正则刮 src/index.ts 的文本。
+ *
+ * 原先刮源码是因为那时元数据就是路由里的一堆字面量，没有别的取法。
+ * 现在两个 well-known 端点共用一个生成函数，直接调它更严：
+ * 刮文本只能看见「源码里写着什么」，调用看见的是「端点真的会吐什么」。
+ *
+ * （字面量搬走的那一刻这四条就红了 —— 正好说明它盯的是写在哪儿，
+ *   而不是发出去的是什么。）
+ */
+const metadata = generateOIDCMetadata('https://id.nightcord.de5.net') as Record<string, unknown>;
+
+/** 从生成的 discovery 文档里读一个字符串数组字段。 */
 function codeArray(field: string): string[] {
-  const m = new RegExp(`${field}:\\s*\\[([^\\]]*)\\]`).exec(source);
-  assert.ok(m, `src/index.ts 里找不到 ${field}`);
-  return m![1]
-    .split(',')
-    .map((s) => s.trim().replace(/^["']|["']$/g, ''))
-    .filter(Boolean);
+  const value = metadata[field];
+  assert.ok(Array.isArray(value), `生成的 discovery 文档里找不到数组字段 ${field}`);
+  return value as string[];
 }
 
 /** 从文档的示例 JSON 里读同一个字段。 */
@@ -105,7 +114,14 @@ describe('几条不能松的底线', () => {
 });
 
 describe('文档里不再教人用 client_secret', () => {
+  /*
+   * 这份清单最初漏了两份 README —— 而它们恰恰是新人看的第一份文档，
+   * 里面那句「保存输出的 client_id 和 client_secret」正好命中下面第三条禁例。
+   * 守卫写了却没指向要守的地方，等于没写。
+   */
   const FILES = [
+    'README.md',
+    'README.en.md',
     'docs/api/examples.md',
     'docs/features/oauth/README.md',
     'docs/features/oidc/quickstart.md',
@@ -129,4 +145,45 @@ describe('文档里不再教人用 client_secret', () => {
       }
     });
   }
+});
+
+describe('文档里不再教人进库里手工注册应用', () => {
+  /*
+   * 「一直没有管理端，每次都进库里改」正是开放平台要解决的问题。
+   * 它做完之后，两份 README 还在原样教手工 INSERT —— 而且插的是一个
+   * （按开放平台的设计）认证不了任何东西的 client_secret。
+   *
+   * 文档不跟着改，等于功能没做：照着 README 走的人一样在进库里改。
+   */
+  const FILES = ['README.md', 'README.en.md'];
+
+  for (const file of FILES) {
+    test(file, () => {
+      const text = readFileSync(join(root, file), 'utf8');
+
+      assert.doesNotMatch(
+        text,
+        /INSERT INTO applications/i,
+        '还在教人手工往 applications 表里插行',
+      );
+      assert.doesNotMatch(
+        text,
+        /应用管理 UI 正在开发中/,
+        'UI 已经有了（仪表板 -> 开放平台 -> /apps）',
+      );
+      assert.match(
+        text,
+        /\/apps/,
+        '得告诉人自助管理在哪儿',
+      );
+    });
+  }
+
+  test('开放平台的入口确实存在（不能只是文档这么写）', () => {
+    // 文档说「仪表板点开放平台」，那就得真有这么个按钮和这么条路由
+    const dashboard = readFileSync(join(root, 'public/js/pages/dashboard.js'), 'utf8');
+    const app = readFileSync(join(root, 'public/js/app.js'), 'utf8');
+    assert.match(dashboard, /navigate\('\/apps'\)/, '仪表板上没有通往 /apps 的入口');
+    assert.match(app, /'\/apps':/, '路由表里没有 /apps');
+  });
 });

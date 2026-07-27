@@ -120,8 +120,15 @@ curl -X POST https://id.nightcord.de5.net/oauth/token \
   -d "grant_type=authorization_code" \
   -d "code=authorization_code_here" \
   -d "client_id=your_client_id" \
-  -d "client_secret=your_client_secret"
+  -d "redirect_uri=https://your-app.com/callback" \
+  -d "code_verifier=the_verifier_from_step_1"
 ```
+
+> [!IMPORTANT]
+> **没有 client_secret。** 本服务的
+> `token_endpoint_auth_methods_supported` 只有 `none` 与 `private_key_jwt`，
+> 令牌端点从不读 client_secret。公开客户端靠 PKCE 的 `code_verifier`
+> 证明自己就是发起授权的那一方；机密客户端走 private_key_jwt。
 
 响应示例：
 ```json

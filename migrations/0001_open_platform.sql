@@ -4,9 +4,16 @@
 -- 所以线上库必须跑这份增量。
 --
 -- 应用方式：
---   npx wrangler d1 execute sekai_pass_db --remote --file=./migrations/0001_open_platform.sql
+--   npm run migrate -- --remote
 --
--- 全部语句都可重复执行（IF NOT EXISTS / 先查后加），跑两遍不会出错。
+-- **不要直接 `wrangler d1 execute --file` 跑这个文件。** 下面第 2 节的
+-- ALTER TABLE 只能干净地跑一次：SQLite 没有 ADD COLUMN IF NOT EXISTS，
+-- 第二次会在第一条上以 `duplicate column name` 中止，且后面的语句一条都不执行。
+-- 于是「不确定库是什么状态，重跑一遍确认」这个再自然不过的动作会拿到一个
+-- 分不清是「已经迁过了」还是「真坏了」的报错；迁移中途失败时更是只能手工补列。
+--
+-- scripts/migrate.mjs 会先读 pragma_table_info 看哪几列已经在了，只补缺的那几列，
+-- 跑几遍、从任意中断点接着跑，结果都一样。加新列时只改这个文件，脚本不用动。
 --
 -- ── 背景 ──────────────────────────────────────────────────────────
 -- client_keys 与 jwt_replay_cache 此前**不在 schema.sql 里**，
@@ -39,9 +46,10 @@ CREATE INDEX IF NOT EXISTS idx_jwt_replay_expires ON jwt_replay_cache(expires_at
 
 -- ── 2. applications 的新列 ────────────────────────────────────────
 --
--- D1（SQLite）不支持 ADD COLUMN IF NOT EXISTS。
--- 下面每条如果列已存在会报 "duplicate column name"，**可以安全忽略**。
--- 想要幂等的话，逐条跑并忽略这一类错误即可。
+-- D1（SQLite）不支持 ADD COLUMN IF NOT EXISTS，所以这几条是整个文件里
+-- 唯一不能重复执行的部分 —— scripts/migrate.mjs 正是靠先查 pragma_table_info
+-- 来跳过已有的列。它按 `ALTER TABLE <表> ADD COLUMN <列>` 这个形状解析本文件，
+-- 加新列照着这个写法即可。
 
 ALTER TABLE applications ADD COLUMN owner_user_id TEXT;
 ALTER TABLE applications ADD COLUMN token_endpoint_auth_method TEXT NOT NULL DEFAULT 'none';
@@ -54,6 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_applications_owner ON applications(owner_user_id)
 -- ── 3. 存量数据 ───────────────────────────────────────────────────
 --
 -- 平台上线前手工插入的应用没有 owner_user_id，在开放平台里看不见也改不了。
+-- （`npm run migrate` 跑完会把这样的应用列出来提醒你。）
 -- 认领方式（把 <你的 user id> 换成实际值）：
 --
 --   UPDATE applications SET owner_user_id = '<你的 user id>'

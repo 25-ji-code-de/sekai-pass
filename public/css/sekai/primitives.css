@@ -1,0 +1,147 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
+
+/* VENDORED —— sekai-design tokens/primitives.css @ cbbb0ec
+ *
+ * 与上游逐字相同（除本注释）。内容取自**提交树**
+ * （git show cbbb0ec:tokens/primitives.css），不是工作区 —— 上游正在开发，
+ * 工作区随时和任何一个 commit 都对不上，标了 commit 就得名副其实。
+ *
+ * **不要在这里改任何值。** 要改就改 sekai-design，再整体同步过来。
+ * 一份设计系统被各仓各改一点，就退化成了各仓各有一份 ——
+ * 这正是本生态在 auth 客户端上已经踩过的坑（五份漂移的实现）。
+ *
+ * 四个文件分开放，是为了让每一个都能和上游的同名文件逐字比对：
+ * 等 sekai-design 推上 GitHub 打了 tag，就能给每个文件加
+ * @sekai-vendor 标记，接进 .github 的每日漂移检查。
+ * 拼成一个文件的话那个比对做不了。
+ */
+
+/* ============================================================
+   SEKAI Design System — Layer 0: Primitives
+   ------------------------------------------------------------
+   World-independent. Nothing here changes between world-system
+   and world-night. Values are the union of the scales actually
+   observed in nightcord/styles.css and sekai-pass/public/css.
+   ============================================================ */
+
+:root {
+  /* ---------- Type families ----------
+     sans  = content voice
+     mono  = MACHINE VOICE. Labels, IDs, sizes, timecodes, status,
+             code. This split is the single strongest signature of
+             both source designs — see DESIGN_SYSTEM.md §2.        */
+  --sekai-font-sans:
+    "Inter", "Noto Sans JP", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --sekai-font-mono:
+    "JetBrains Mono", "Cascadia Code", "Fira Code", "Menlo", "Monaco",
+    "Consolas", "Noto Sans Mono", monospace;
+
+  /* ---------- Type scale ---------- */
+  --sekai-text-micro: 10px; /* mono signatures, entity labels, scope tags */
+  --sekai-text-meta: 11px; /* hints, privacy notes, scrub time */
+  --sekai-text-label: 12px; /* form labels, badges, timestamps */
+  --sekai-text-sm: 13px; /* subtitles, scope names, inline errors */
+  --sekai-text-md: 14px; /* Pass body */
+  --sekai-text-lg: 15px; /* Nightcord message body + composer */
+  --sekai-text-xl: 18px; /* card / auth titles */
+  --sekai-text-2xl: 20px;
+  --sekai-text-3xl: 24px; /* modal headings */
+  --sekai-text-4xl: 32px; /* avatar initials */
+
+  --sekai-weight-normal: 400;
+  --sekai-weight-medium: 500;
+  --sekai-weight-semibold: 600;
+  --sekai-weight-bold: 700;
+
+  --sekai-leading-none: 1;
+  --sekai-leading-tight: 1.4;
+  --sekai-leading: 1.5;
+  --sekai-leading-relaxed: 1.6;
+
+  /* Tracking is how the mono voice reads as "machine". Never apply
+     wide tracking to sans body copy. */
+  --sekai-tracking-tight: -0.01em;
+  --sekai-tracking-none: 0;
+  --sekai-tracking-wide: 0.5px;
+  --sekai-tracking-wider: 1px;
+  --sekai-tracking-widest: 2px;
+
+  /* ---------- Spacing ---------- */
+  --sekai-space-3xs: 2px;
+  --sekai-space-2xs: 4px;
+  --sekai-space-xs: 6px;
+  --sekai-space-sm: 8px;
+  --sekai-space-md: 12px;
+  --sekai-space-lg: 16px;
+  --sekai-space-xl: 20px;
+  --sekai-space-2xl: 24px;
+  --sekai-space-3xl: 32px;
+  --sekai-space-4xl: 48px;
+
+  /* ---------- Radius ---------- */
+  --sekai-radius-xs: 4px; /* inputs, buttons, badges (system register) */
+  --sekai-radius-sm: 6px; /* chips, transport keys, status pills */
+  --sekai-radius-md: 8px; /* cards, code blocks */
+  --sekai-radius-lg: 12px; /* composer, toasts, modal buttons */
+  --sekai-radius-xl: 18px; /* entity avatars */
+  --sekai-radius-2xl: 24px; /* full-screen modals */
+  --sekai-radius-full: 9999px;
+
+  /* ---------- Elevation ----------
+     Surfaces are flat. Depth comes from shadow, never from a heavy
+     gradient. See DESIGN_SYSTEM.md §4. */
+  --sekai-elev-0: none;
+  --sekai-elev-1: 0 2px 4px rgb(0 0 0 / 0.2);
+  --sekai-elev-2: 0 4px 12px rgb(0 0 0 / 0.2);
+  --sekai-elev-3: 0 8px 24px rgb(0 0 0 / 0.3);
+  --sekai-elev-4: 0 20px 60px rgb(0 0 0 / 0.5); /* Pass container */
+  --sekai-elev-modal: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+  --sekai-elev-inset: inset 0 2px 4px rgb(0 0 0 / 0.2);
+
+  /* ---------- Motion ---------- */
+  --sekai-dur-instant: 0.1s;
+  --sekai-dur-fast: 0.15s;
+  --sekai-dur: 0.2s;
+  --sekai-dur-slow: 0.3s;
+  --sekai-dur-slower: 0.4s;
+
+  --sekai-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --sekai-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1); /* nightcord default */
+  --sekai-ease-spring: cubic-bezier(0.16, 1, 0.3, 1); /* entrances */
+  --sekai-ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* The canonical hover gesture: brighten the hairline, lift 1px. */
+  --sekai-lift: translateY(-1px);
+  --sekai-lift-strong: translateY(-2px);
+
+  /* ---------- Neutral tints ----------
+     Complete colors, not triplets. World-independent additive
+     overlays. Use these when you need "a bit lighter / darker than
+     whatever is underneath" rather than a named surface. */
+  --sekai-tint-hover: rgb(255 255 255 / 0.05);
+  --sekai-tint-active: rgb(255 255 255 / 0.08);
+  --sekai-tint-raised: rgb(255 255 255 / 0.02);
+  --sekai-tint-sunken: rgb(0 0 0 / 0.2);
+  --sekai-tint-scrim: rgb(0 0 0 / 0.25);
+
+  /* ---------- Z ladder ---------- */
+  --sekai-z-base: 0;
+  --sekai-z-raised: 10;
+  --sekai-z-sticky: 100;
+  --sekai-z-overlay: 999;
+  --sekai-z-modal: 1000;
+  --sekai-z-toast: 9999;
+  --sekai-z-viewer: 99999;
+
+  /* ---------- Layout constants ---------- */
+  --sekai-sidebar-width: 280px;
+  --sekai-bar-height: 48px; /* server header / chat header */
+  --sekai-sticker-size: 120px;
+}
+
+@media screen and (max-width: 480px) {
+  :root {
+    --sekai-sticker-size: 80px;
+  }
+}

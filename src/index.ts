@@ -23,8 +23,11 @@ import { verifyPKCE, validateCodeChallenge, validateCodeVerifier } from "./lib/p
 import { issueTokens, validateAccessToken, refreshAccessToken, revokeRefreshToken, revokeAllUserTokens } from "./lib/tokens.ts";
 import { validateScopeParameter, formatScopes, filterUserData, SCOPES, hasScopes } from "./lib/scope.ts";
 import { isOIDCRequest } from "./lib/oidc-scope.ts";
-import { generateIDToken } from "./lib/id-token.ts";
-import { generateOIDCMetadata } from "./lib/oidc-discovery.ts";
+import { generateIDToken, EMAIL_VERIFIED } from "./lib/id-token.ts";
+import {
+  generateOIDCMetadata,
+  generateAuthorizationServerMetadata
+} from "./lib/oidc-discovery.ts";
 import { getPublicKeys, checkAndRotateKeys } from "./lib/keys.ts";
 import { authenticateClient } from "./lib/client-auth.ts";
 import * as html from "./lib/html.ts";
@@ -220,26 +223,7 @@ app.use("/oauth/*", async (c, next) => {
 // OAuth Discovery Endpoint (RFC 8414)
 app.get("/.well-known/oauth-authorization-server", async (c) => {
   const baseUrl = new URL(c.req.url).origin;
-
-  return c.json({
-    issuer: baseUrl,
-    authorization_endpoint: `${baseUrl}/oauth/authorize`,
-    token_endpoint: `${baseUrl}/oauth/token`,
-    userinfo_endpoint: `${baseUrl}/oauth/userinfo`,
-    revocation_endpoint: `${baseUrl}/oauth/revoke`,
-    response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
-    code_challenge_methods_supported: ["S256"],
-    token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
-    token_endpoint_auth_signing_alg_values_supported: ["ES256", "RS256"],
-    revocation_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: Object.values(SCOPES),
-    service_documentation: `${baseUrl}/docs`,
-    ui_locales_supported: ["zh-CN", "en-US"],
-    // OAuth 2.1: PKCE is mandatory
-    require_pushed_authorization_requests: false,
-    require_request_uri_registration: false
-  });
+  return c.json(generateAuthorizationServerMetadata(baseUrl));
 });
 
 // OpenID Connect Discovery Endpoint
@@ -683,7 +667,9 @@ app.get("/oauth/userinfo", async (c) => {
 
   if (hasScopes(tokenInfo.scope, [SCOPES.EMAIL])) {
     userInfo.email = user.email;
-    userInfo.email_verified = true;  // Assuming verified
+    // 与 ID Token 用同一个常量 —— 两处发不一样的值会让接入方无所适从，
+    // 而且这种不一致没有任何东西会报错。理由见 EMAIL_VERIFIED 的注释。
+    userInfo.email_verified = EMAIL_VERIFIED;
   }
 
   // OAuth 2.1: Responses with sensitive data must include Cache-Control: no-store
@@ -758,13 +744,36 @@ app.get("*", async (c) => {
   return c.env.ASSETS.fetch(new Request(url.toString(), c.req.raw));
 });
 
-// Scheduled handler for key rotation
+/**
+ * 定时任务：签名密钥轮换。
+ *
+ * ── 这里此前有个把整件事变成空转的 bug ──────────────────────────
+ *
+ * 原来的写法是 `if (event.cron === "0 0 * * 0")`，而 wrangler.toml 里配的是
+ * `crons = ["0 0 * * SUN"]`。Cloudflare 传给 `event.cron` 的**就是配置里
+ * 那一行原文**，两个字符串不相等 —— 于是 checkAndRotateKeys 一次都没跑过。
+ *
+ * 后果不是「少转了一次密钥」：
+ *   1. 密钥 90 天过期，而轮换从不发生
+ *   2. getCurrentSigningKey 查的是 `status = 'active'`，**不看 expires_at**，
+ *      于是继续拿那把过期的钥匙签 ID Token
+ *   3. getPublicKeys 会把过期超过 7 天宽限期的钥匙排除出 JWKS
+ *
+ * 三条合起来 = **用一把没有发布在 JWKS 里的钥匙签 token**。
+ * 线上 /.well-known/jwks.json 实测返回 `{"keys":[]}`，
+ * 而 discovery 里同时声明着 `id_token_signing_alg_values_supported`。
+ * 任何按 OIDC 规范拿 JWKS 验签的客户端都验不过。
+ *
+ * ── 为什么直接把比较删掉 ────────────────────────────────────────
+ *
+ * 只有一条 cron，这个比较不提供任何东西，只提供一种失效方式。
+ * checkAndRotateKeys 本身就是幂等的：没到 90 天它什么都不做。
+ * 将来真要加第二条 cron，再按 event.cron 分派 —— 那时候
+ * test/key-rotation.test.ts 会要求新加的字符串必须与配置对得上。
+ */
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    // Check and rotate keys weekly
-    if (event.cron === "0 0 * * 0") {
-      await checkAndRotateKeys(env.DB, env.KV, env.KEY_ENCRYPTION_SECRET);
-    }
+    await checkAndRotateKeys(env.DB, env.KV, env.KEY_ENCRYPTION_SECRET);
   }
 };

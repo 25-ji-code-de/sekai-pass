@@ -77,7 +77,7 @@ export async function authenticateClient(
       if (!clientAssertion || !clientAssertionType) {
         return {
           authenticated: false,
-          error: "invalid_request",
+          error: "invalid_client",
           errorDescription: "client_assertion and client_assertion_type are required for private_key_jwt authentication"
         };
       }
@@ -113,7 +113,7 @@ async function authenticateClientWithJWT(
   if (clientAssertionType !== "urn:ietf:params:oauth:client-assertion-type:jwt-bearer") {
     return {
       authenticated: false,
-      error: "invalid_request",
+      error: "invalid_client",
       errorDescription: "Invalid client_assertion_type. Must be 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'"
     };
   }

@@ -403,7 +403,7 @@ app.post("/oauth/token", async (c) => {
         error: authResult.error || "invalid_client",
         error_description: authResult.errorDescription
       },
-      401
+      400
     );
   }
 
@@ -415,7 +415,7 @@ app.post("/oauth/token", async (c) => {
   ).bind(clientId).first();
 
   if (!app) {
-    return c.json({ error: "invalid_client" }, 401);
+    return c.json({ error: "invalid_client" }, 400);
   }
 
   // Handle authorization_code grant

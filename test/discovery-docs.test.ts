@@ -24,19 +24,28 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { generateOIDCMetadata } from '../src/lib/oidc-discovery.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const source = readFileSync(join(root, 'src/index.ts'), 'utf8');
 const doc = readFileSync(join(root, 'docs/api/discovery.md'), 'utf8');
 
-/** 从 src/index.ts 里读一个字符串数组字段。 */
+/*
+ * 真值取自**真的调一次生成函数**，不再用正则刮 src/index.ts 的文本。
+ *
+ * 原先刮源码是因为那时元数据就是路由里的一堆字面量，没有别的取法。
+ * 现在两个 well-known 端点共用一个生成函数，直接调它更严：
+ * 刮文本只能看见「源码里写着什么」，调用看见的是「端点真的会吐什么」。
+ *
+ * （字面量搬走的那一刻这四条就红了 —— 正好说明它盯的是写在哪儿，
+ *   而不是发出去的是什么。）
+ */
+const metadata = generateOIDCMetadata('https://id.nightcord.de5.net') as Record<string, unknown>;
+
+/** 从生成的 discovery 文档里读一个字符串数组字段。 */
 function codeArray(field: string): string[] {
-  const m = new RegExp(`${field}:\\s*\\[([^\\]]*)\\]`).exec(source);
-  assert.ok(m, `src/index.ts 里找不到 ${field}`);
-  return m![1]
-    .split(',')
-    .map((s) => s.trim().replace(/^["']|["']$/g, ''))
-    .filter(Boolean);
+  const value = metadata[field];
+  assert.ok(Array.isArray(value), `生成的 discovery 文档里找不到数组字段 ${field}`);
+  return value as string[];
 }
 
 /** 从文档的示例 JSON 里读同一个字段。 */

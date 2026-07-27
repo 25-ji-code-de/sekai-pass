@@ -28,6 +28,7 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { generateId } from "./password.ts";
 import { getApplication } from "./applications.ts";
+import { isUniqueConstraintError } from "./db-errors.ts";
 import type { ValidationError } from "./applications.ts";
 
 /** 单个应用能注册的公钥数量上限。留出轮换期间新旧并存的余量。 */
@@ -314,13 +315,31 @@ export async function addClientKey(
   const stored = { ...jwk, kid: keyId, alg: algorithm, use: "sig" };
   const now = Date.now();
 
-  await db
-    .prepare(
-      `INSERT INTO client_keys (client_id, key_id, public_key_jwk, algorithm, status, created_at)
-       VALUES (?, ?, ?, ?, 'active', ?)`,
-    )
-    .bind(clientId, keyId, JSON.stringify(stored), algorithm, now)
-    .run();
+  try {
+    await db
+      .prepare(
+        `INSERT INTO client_keys (client_id, key_id, public_key_jwk, algorithm, status, created_at)
+         VALUES (?, ?, ?, ?, 'active', ?)`,
+      )
+      .bind(clientId, keyId, JSON.stringify(stored), algorithm, now)
+      .run();
+  } catch (error) {
+    /*
+     * 上面那个 duplicate 查询已经挡掉了绝大多数情况，剩下的是竞态：
+     * 两个请求同时登记同一个 key_id，都查不到，然后第二个撞上主键
+     * (client_id, key_id)。
+     *
+     * 主键是真正的守卫；这里把它的错误翻回与非并发路径**完全相同**的
+     * 字段错误，免得同一件事按时机不同给出两种回答（一种 400 一种 500）。
+     */
+    if (isUniqueConstraintError(error)) {
+      return {
+        ok: false,
+        errors: [{ field: "key_id", message: `key_id "${keyId}" 已存在，换一个或先删除旧的` }],
+      };
+    }
+    throw error;
+  }
 
   return {
     ok: true,

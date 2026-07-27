@@ -219,9 +219,16 @@ Response:
   "picture": "https://storage.nightcord.de5.net/avatars/xxx.webp",
   "bio": "Hello, SEKAI",
   "email": "user@example.com",
-  "email_verified": true
+  "email_verified": false
 }
 ```
+
+> **`email_verified` is always `false`** — this service has no email verification flow
+> (registration only requires the address to be unique; no confirmation mail is sent).
+> **Do not use this `email` for account linking**: if you trust an unverified address,
+> anyone can register here with a victim's email and take over that victim's account on
+> *your* side. If you want to link by email, send your own confirmation mail. See the
+> [OIDC implementation notes](./docs/features/oidc/implementation.md#email_verified-恒为-false).
 
 #### 4. Refresh Access Token
 
@@ -286,7 +293,7 @@ ID Token is a JWT containing user information：
   "name": "Display Name",
   "preferred_username": "username",
   "email": "user@example.com",
-  "email_verified": true
+  "email_verified": false
 }
 ```
 

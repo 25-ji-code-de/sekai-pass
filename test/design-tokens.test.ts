@@ -327,6 +327,80 @@ describe('新组件样式遵守设计系统', () => {
   });
 });
 
+describe('圆角走 token', () => {
+  /*
+   * 设计系统给圆角定了七档，每档都有明确用途（xs=控件、sm=状态胶囊、
+   * md=卡片、lg=输入区/吐司、xl=entity 头像、2xl=全屏模态、full=药丸）。
+   * styles.css 里一度是 28 处硬编码、1 处 token —— 也就是说上游改一档，
+   * Pass 一处都不跟。
+   *
+   * 保留的三类在下面写明理由：形状声明与没有对应档位的值，不算漂移。
+   */
+  const KEEP = new Map([
+    ['50%', '圆形是形状声明，不是尺寸档位（4 处：loading / connection-icon / avatar-preview / pow-spinner）'],
+    ['2px', '没有对应档位（连接线与上传进度条的端头）'],
+    // .app-badge。上游 sekai-design 的 .sekai-badge--pill 就是
+    // `padding: 2px 9px; border-radius: 10px`，逐字相同，且上游自己也没有
+    // 把这个 10px 换成 token。跟着上游走，而不是自作主张换成 radius-full。
+    ['10px', '与上游 .sekai-badge--pill 逐字对齐（卡片头部的药丸徽章）'],
+  ]);
+
+  test('没有新的硬编码圆角', () => {
+    const bad: string[] = [];
+    for (const m of styles.matchAll(/border-radius:\s*([^;]+);/g)) {
+      const value = m[1].trim();
+      if (value.startsWith('var(--sekai-radius-')) continue;
+      if (KEEP.has(value)) continue;
+      const line = styles.slice(0, m.index).split('\n').length;
+      bad.push(`第 ${line} 行：${value}`);
+    }
+    assert.deepEqual(
+      bad,
+      [],
+      '这些圆角没走 token —— 上游改档位时它们不会跟：\n  ' + bad.join('\n  ') +
+        '\n（确实没有对应档位的话，把值加进 KEEP 并写明理由）',
+    );
+  });
+
+  test('KEEP 里的每一条都还在用（否则就是过期的豁免）', () => {
+    for (const [value, why] of KEEP) {
+      assert.ok(
+        styles.includes(`border-radius: ${value};`),
+        `KEEP 里的 ${value} 已经没人用了，删掉这条豁免。理由原文：${why}`,
+      );
+    }
+  });
+
+  test('用到的圆角档位都真的存在', () => {
+    for (const m of styles.matchAll(/border-radius:\s*var\((--sekai-radius-[\w-]+)\)/g)) {
+      assert.ok(
+        tokens.includes(`${m[1]}:`),
+        `${m[1]} 在四层 token 里没有定义 —— 会静默退化成 0 圆角`,
+      );
+    }
+  });
+
+  test('控件只有一档圆角', () => {
+    /*
+     * input / button / textarea 共用 --sekai-radius-control。
+     * .app-form textarea 一度自己写 6px，比全局的 textarea 多 2px ——
+     * 同一类控件在同一个页面上有两种圆角，没有任何道理。
+     */
+    for (const sel of ['input', 'button', 'textarea', '.app-form textarea']) {
+      const re = new RegExp(`(^|\\n)${sel.replace('.', '\\.')}\\s*\\{([^}]*)\\}`);
+      const m = re.exec(styles);
+      assert.ok(m, `找不到规则 ${sel}`);
+      const radius = /border-radius:\s*([^;]+);/.exec(m![2]);
+      assert.ok(radius, `${sel} 没有设圆角`);
+      assert.equal(
+        radius![1].trim(),
+        'var(--sekai-radius-control)',
+        `${sel} 没用控件档位`,
+      );
+    }
+  });
+});
+
 describe('没有重复定义的选择器', () => {
   /*
    * CSS_REFACTOR_PLAN.md 列过三处重复定义（.btn-secondary、

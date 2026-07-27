@@ -211,9 +211,14 @@ curl https://id.nightcord.de5.net/oauth/userinfo \
   "picture": "https://storage.nightcord.de5.net/avatars/xxx.webp",
   "bio": "Hello, SEKAI",
   "email": "user@example.com",
-  "email_verified": true
+  "email_verified": false
 }
 ```
+
+> **`email_verified` 恒为 `false`** —— 本服务没有邮箱验证流程（注册只要求邮箱唯一，不发确认信）。
+> **不要用这里的 `email` 做账号关联**：信了未验证的邮箱，攻击者用受害者的邮箱在这里注册就能接管
+> 受害者在你那边的账号。要按邮箱关联请自己发确认信。详见
+> [OIDC 实现文档](./docs/features/oidc/implementation.md#email_verified-恒为-false)。
 
 #### 4. 刷新访问令牌
 
@@ -277,7 +282,7 @@ ID Token 是一个 JWT，包含用户信息：
   "name": "Display Name",
   "preferred_username": "username",
   "email": "user@example.com",
-  "email_verified": true
+  "email_verified": false
 }
 ```
 

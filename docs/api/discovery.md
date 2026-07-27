@@ -16,12 +16,19 @@ GET /.well-known/oauth-authorization-server
   "authorization_endpoint": "https://id.nightcord.de5.net/oauth/authorize",
   "token_endpoint": "https://id.nightcord.de5.net/oauth/token",
   "userinfo_endpoint": "https://id.nightcord.de5.net/oauth/userinfo",
+  "jwks_uri": "https://id.nightcord.de5.net/.well-known/jwks.json",
+  "revocation_endpoint": "https://id.nightcord.de5.net/oauth/revoke",
   "response_types_supported": ["code"],
-  "grant_types_supported": ["authorization_code"],
-  "code_challenge_methods_supported": ["S256", "plain"],
-  "token_endpoint_auth_methods_supported": ["client_secret_post", "none"],
+  "grant_types_supported": ["authorization_code", "refresh_token"],
+  "code_challenge_methods_supported": ["S256"],
+  "token_endpoint_auth_methods_supported": ["none", "private_key_jwt"],
+  "token_endpoint_auth_signing_alg_values_supported": ["ES256", "RS256"],
+  "revocation_endpoint_auth_methods_supported": ["none"],
+  "scopes_supported": ["openid", "profile", "email", "applications", "admin"],
   "service_documentation": "https://id.nightcord.de5.net/docs",
-  "ui_locales_supported": ["zh-CN", "en-US"]
+  "ui_locales_supported": ["zh-CN", "en-US"],
+  "require_pushed_authorization_requests": false,
+  "require_request_uri_registration": false
 }
 ```
 
@@ -37,7 +44,7 @@ GET /api/oauth/config
   "token_endpoint": "https://id.nightcord.de5.net/oauth/token",
   "userinfo_endpoint": "https://id.nightcord.de5.net/oauth/userinfo",
   "pkce_supported": true,
-  "code_challenge_methods": ["S256", "plain"]
+  "code_challenge_methods": ["S256"]
 }
 ```
 
@@ -97,7 +104,7 @@ curl https://id.nightcord.de5.net/.well-known/oauth-authorization-server | jq
 |------|------|------|
 | Authorization Code Flow | ✅ | 标准授权码流程 |
 | PKCE (S256) | ✅ | 所有客户端强制使用 |
-| PKCE (plain) | ✅ | 不推荐，仅用于兼容性 |
+| PKCE (plain) | ❌ | OAuth 2.1 明令禁止 —— 服务端直接拒绝 |
 | Public Client | ✅ | 用于 SPA 和移动应用 |
 | Refresh Token | ✅ | 30天有效期 |
 | Scope | ✅ | openid, profile, email, applications, admin |

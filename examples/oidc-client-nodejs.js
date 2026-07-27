@@ -25,6 +25,29 @@ app.use(session({
 
 let client;
 
+/**
+ * HTML 转义。**每一个来自 ID Token / userinfo 的值都必须过这里。**
+ *
+ * ID Token 的 claim 不是可信数据。`name` / `preferred_username` / `email`
+ * 归根到底是**别的用户自己填的**字段 —— 在 SEKAI Pass 上，昵称只校验长度
+ * （≤ 50 字符），`<img src=x onerror=alert(1)>` 才 33 个字符，存得下。
+ *
+ * 也就是说：任何人把自己的昵称改成一段脚本，登录你的应用，脚本就在**你的**
+ * 域上执行 —— 拿得到你给自己用户种的 cookie 和 localStorage。
+ *
+ * 这份示例此前一处转义都没有。SEKAI Pass 自己的授权页是转义了的
+ * （src/lib/html.ts），照抄这份示例的人却没有。
+ */
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // 初始化 OIDC 客户端
 async function initializeOIDC() {
   try {
@@ -152,21 +175,21 @@ app.get('/', (req, res) => {
             <h2>👤 用户信息</h2>
             <div class="info-grid">
               <div class="info-label">用户 ID (sub):</div>
-              <div class="info-value">${req.session.user.sub}</div>
+              <div class="info-value">${escapeHtml(req.session.user.sub)}</div>
 
               ${req.session.user.name ? `
                 <div class="info-label">姓名:</div>
-                <div class="info-value">${req.session.user.name}</div>
+                <div class="info-value">${escapeHtml(req.session.user.name)}</div>
               ` : ''}
 
               ${req.session.user.preferred_username ? `
                 <div class="info-label">用户名:</div>
-                <div class="info-value">${req.session.user.preferred_username}</div>
+                <div class="info-value">${escapeHtml(req.session.user.preferred_username)}</div>
               ` : ''}
 
               ${req.session.user.email ? `
                 <div class="info-label">邮箱:</div>
-                <div class="info-value">${req.session.user.email}</div>
+                <div class="info-value">${escapeHtml(req.session.user.email)}</div>
               ` : ''}
 
               ${req.session.user.email_verified !== undefined ? `
@@ -180,25 +203,25 @@ app.get('/', (req, res) => {
             <h2>🎫 ID Token Claims</h2>
             <div class="info-grid">
               <div class="info-label">Issuer (iss):</div>
-              <div class="info-value">${req.session.user.iss}</div>
+              <div class="info-value">${escapeHtml(req.session.user.iss)}</div>
 
               <div class="info-label">Audience (aud):</div>
-              <div class="info-value">${req.session.user.aud}</div>
+              <div class="info-value">${escapeHtml(req.session.user.aud)}</div>
 
               <div class="info-label">Issued At (iat):</div>
-              <div class="info-value">${new Date(req.session.user.iat * 1000).toLocaleString('zh-CN')}</div>
+              <div class="info-value">${escapeHtml(new Date(req.session.user.iat * 1000).toLocaleString('zh-CN'))}</div>
 
               <div class="info-label">Expires At (exp):</div>
-              <div class="info-value">${new Date(req.session.user.exp * 1000).toLocaleString('zh-CN')}</div>
+              <div class="info-value">${escapeHtml(new Date(req.session.user.exp * 1000).toLocaleString('zh-CN'))}</div>
 
               ${req.session.user.auth_time ? `
                 <div class="info-label">Auth Time:</div>
-                <div class="info-value">${new Date(req.session.user.auth_time * 1000).toLocaleString('zh-CN')}</div>
+                <div class="info-value">${escapeHtml(new Date(req.session.user.auth_time * 1000).toLocaleString('zh-CN'))}</div>
               ` : ''}
 
               ${req.session.user.nonce ? `
                 <div class="info-label">Nonce:</div>
-                <div class="info-value">${req.session.user.nonce}</div>
+                <div class="info-value">${escapeHtml(req.session.user.nonce)}</div>
               ` : ''}
             </div>
           </div>
@@ -206,7 +229,7 @@ app.get('/', (req, res) => {
           ${req.session.idToken ? `
             <div class="info-section">
               <h2>🔐 ID Token (JWT)</h2>
-              <div class="token-display">${req.session.idToken}</div>
+              <div class="token-display">${escapeHtml(req.session.idToken)}</div>
             </div>
           ` : ''}
 
@@ -402,9 +425,14 @@ app.get('/callback', async (req, res) => {
     res.redirect('/');
   } catch (error) {
     console.error('❌ 回调处理失败:', error.message);
+    /*
+     * error.message 不是本地字面量：openid-client 会把 token 端点返回的
+     * `error_description` 原样带进来。把它拼进 HTML，等于让上游的响应文本
+     * 决定你页面上的标记。
+     */
     res.status(500).send(`
       <h1>登录失败</h1>
-      <p>错误: ${error.message}</p>
+      <p>错误: ${escapeHtml(error.message)}</p>
       <a href="/">返回首页</a>
     `);
   }

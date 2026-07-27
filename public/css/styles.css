@@ -1,65 +1,85 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* ========== CSS Variables / Theme System ========== */
-/* Default theme: Dark (Niigo style) */
+/*
+ * 取值的唯一来源是 sekai-tokens.css（vendored 自 sekai-design），
+ * 本仓就是那套设计系统里的 world-system。
+ *
+ * 下面这些是**旧名字的别名**，全部从 --sekai-* 派生。存量样式还在用
+ * 它们，一次性改完 1300 行风险不划算；但派生之后两种写法不可能再各改
+ * 各的 —— CSS_REFACTOR_PLAN.md 记的第一条严重问题就是
+ * `--error-color` 在 `#e57373` 和 `229 115 115` 之间漂移，
+ * 根因正是"同一个颜色存在两种拼写"。
+ *
+ * **新写的组件样式一律直接用 --sekai-*，不要再加新的别名。**
+ */
 :root {
-  --bg-color: #0b0b0e;
+  --bg-color: rgb(var(--sekai-canvas));
   --bg-black: 0 0 0;
   --bg-white: 255 255 255;
-  --button-color: #1a1a1e;
-  --card-bg: #17171c;
-  --card-shadow: rgba(0, 0, 0, 0.5);
-  --primary-color: #a48cd6;
-  --primary-color-mix: 164 140 214;
-  --primary-hover: #bda6e8;
-  --text-main: #e2e2e6;
-  --text-muted: #75757a;
-  --border-color: #2a2a30;
-  --gradient-bg: #594483;
-  --input-bg: #111114;
-  --input-placeholder: rgba(255, 255, 255, 0.2);
-  --error-color: 229 115 115;
-  --success-color: 129 199 132;
-  --code-font: 'Menlo', 'Monaco', 'Courier New', monospace;
+  --button-color: rgb(var(--sekai-fg-on-accent));
+  --card-bg: rgb(var(--sekai-surface));
+  --card-shadow: rgb(0 0 0 / 0.5);
+  --primary-color: rgb(var(--sekai-accent));
+  --primary-color-mix: var(--sekai-accent);
+  --primary-hover: rgb(var(--sekai-accent-hover));
+  --text-main: rgb(var(--sekai-fg));
+  --text-muted: rgb(var(--sekai-fg-muted));
+  --border-color: rgb(var(--sekai-line));
+  --gradient-bg: rgb(var(--sekai-accent-deep));
+  --input-bg: rgb(var(--sekai-surface-sunken));
+  --input-placeholder: rgb(255 255 255 / 0.2);
+  --error-color: var(--sekai-danger);
+  --success-color: var(--sekai-success);
+  --code-font: var(--sekai-font-mono);
 }
 
-/* Future theme support - Light mode (placeholder) */
+/* Future theme support — Light mode (placeholder)
+ *
+ * 换主题**只改 contract token**，别名会自己跟着走。
+ * 以前这里是给每个别名各写一遍，而 --primary-color 与
+ * --primary-color-mix 是同一个颜色的两种拼写 —— 照着抄一份新主题，
+ * 就等于新造一处漂移点。
+ *
+ * 一整套新配色在设计系统里叫一个 "world"：它必须定义 contract 里的
+ * **每一个** token。下面只是示意需要覆盖哪些角色。
+ */
 @media (prefers-color-scheme: light) {
   :root {
     /* Uncomment to enable light theme:
-    --bg-color: #f5f5f7;
-    --bg-black: 0 0 0;
-    --bg-white: 255 255 255;
-    --button-color: #ffffff;
-    --card-bg: #ffffff;
-    --card-shadow: rgba(0, 0, 0, 0.1);
-    --primary-color: #7c5fb8;
-    --primary-color-mix: 124 95 184;
-    --primary-hover: #9478cc;
-    --text-main: #1d1d1f;
-    --text-muted: #86868b;
-    --border-color: #d2d2d7;
-    --gradient-bg: #9478cc;
-    --input-bg: #f5f5f7;
-    --input-placeholder: rgba(0, 0, 0, 0.3);
-    --error-color: 211 47 47;
-    --success-color: 56 142 60;
+    --sekai-canvas: 245 245 247;
+    --sekai-surface: 255 255 255;
+    --sekai-surface-sunken: 245 245 247;
+    --sekai-line: 210 210 215;
+    --sekai-fg: 29 29 31;
+    --sekai-fg-muted: 134 134 139;
+    --sekai-fg-on-accent: 255 255 255;
+    --sekai-accent: 124 95 184;
+    --sekai-accent-hover: 148 120 204;
+    --sekai-accent-deep: 148 120 204;
+    --sekai-danger: 211 47 47;
+    --sekai-success: 56 142 60;
+    --card-shadow: rgb(0 0 0 / 0.1);
+    --input-placeholder: rgb(0 0 0 / 0.3);
     */
   }
 }
 
 /* Custom theme classes for future manual theme switching */
-/* Example: <body class="theme-leo"> */
+/* Example: <body class="theme-leo">
+ *
+ * 单团配色只需要动 accent 这一组，其余角色继承。
+ */
 /*
 .theme-leo {
-  --primary-color: #ff9800;
-  --primary-color-mix: 255 152 0;
-  --gradient-bg: #f57c00;
+  --sekai-accent: 255 152 0;
+  --sekai-accent-hover: 255 167 38;
+  --sekai-accent-deep: 245 124 0;
 }
 
 .theme-vbs {
-  --primary-color: #f44336;
-  --primary-color-mix: 244 67 54;
-  --gradient-bg: #d32f2f;
+  --sekai-accent: 244 67 54;
+  --sekai-accent-hover: 239 83 80;
+  --sekai-accent-deep: 211 47 47;
 }
 */
 
@@ -86,7 +106,7 @@ body {
 .container {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--sekai-radius-panel);
   padding: 42px;
   width: min(90vw, 350px);
   box-shadow: 0 20px 60px var(--card-shadow);
@@ -124,7 +144,7 @@ body {
 .logo img {
   max-width: 100%;
   height: auto;
-  border-radius: 4px;
+  border-radius: var(--sekai-radius-xs);
   mix-blend-mode: normal;
   margin: 0 auto;
   display: block;
@@ -149,7 +169,7 @@ input {
   padding: 14px 16px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--sekai-radius-control);
   color: var(--text-main);
   font-size: 14px;
   font-family: 'Inter', monospace;
@@ -172,7 +192,7 @@ button {
   background: var(--primary-color);
   color: var(--button-color);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--sekai-radius-control);
   font-size: 14px;
   font-weight: 700;
   text-transform: uppercase;
@@ -249,7 +269,7 @@ button:disabled {
   width: 64px;
   height: 64px;
   background: var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--sekai-radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -268,7 +288,7 @@ button:disabled {
 .user-badge {
   background: #202025;
   padding: 6px 12px;
-  border-radius: 4px;
+  border-radius: var(--sekai-radius-xs);
   font-size: 12px;
   font-family: var(--code-font);
   color: var(--text-muted);
@@ -280,7 +300,7 @@ button:disabled {
 .permission-box {
   background: rgba(var(--bg-white) / 0.02);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--sekai-radius-xs);
   padding: 20px;
   margin-bottom: 24px;
 }
@@ -303,7 +323,7 @@ button:disabled {
 
 .user-info {
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--sekai-radius-xs);
   padding: 0;
   margin-bottom: 30px;
   background: rgba(var(--bg-black) / 0.125);
@@ -371,7 +391,7 @@ button:disabled {
   .entity-avatar {
     width: 64px;
     height: 64px;
-    border-radius: 18px;
+    border-radius: var(--sekai-radius-xl);
     background: linear-gradient(135deg, #2a2a30, #1a1a1e);
     border: 1px solid var(--border-color);
     display: flex;
@@ -481,7 +501,7 @@ button:disabled {
   .scope-list {
     background: linear-gradient(180deg, rgba(20, 20, 25, 0.6) 0%, rgba(10, 10, 14, 0.4) 100%);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--sekai-radius-md);
     overflow: hidden;
     margin-bottom: 32px;
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
@@ -508,7 +528,7 @@ button:disabled {
     height: 32px;
     background: rgba(60, 60, 70, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
+    border-radius: var(--sekai-radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -536,7 +556,7 @@ button:disabled {
   .scope-tag {
     font-size: 9px;
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: var(--sekai-radius-xs);
     background: rgba(255, 255, 255, 0.07);
     color: var(--text-muted);
     font-family: var(--code-font);
@@ -675,7 +695,7 @@ button:disabled {
   padding: 20px;
   background: rgba(var(--bg-white) / 0.02);
   border: 1px dashed var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--sekai-radius-xs);
 }
 
 .avatar-preview {
@@ -783,7 +803,7 @@ textarea {
   padding: 14px 16px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--sekai-radius-control);
   color: var(--text-main);
   font-size: 14px;
   font-family: 'Inter', monospace;
@@ -897,9 +917,19 @@ input[type="url"]:valid:not(:placeholder-shown) {
   justify-content: center;
 }
 
-.text-dimmed {
-  opacity: 0.6;
-}
+/*
+ * 这里原本还有一条 `.text-dimmed { opacity: 0.6 }`。
+ *
+ * 它是**死代码** —— 第 1088 行有第二个 .text-dimmed 定义，
+ * 权重相同、位置更靠后，实际生效的一直是那条 `color: var(--text-muted)`。
+ * CSS_REFACTOR_PLAN.md 列过 .btn-secondary / @keyframes spin / .avatar-preview
+ * 三处重复定义，漏了这一处。
+ *
+ * 删的是 opacity 那条而不是 color 那条：按设计系统，
+ * 「文字变淡」是**颜色**的事（fg-muted / fg-subtle），
+ * opacity 是留给失效**控件**的。而且 opacity 会叠乘 ——
+ * 撤销的公钥行本身就是 0.5，再套 0.6 会掉到 0.3。
+ */
 
 .text-highlight {
   color: var(--text-main);
@@ -1005,7 +1035,7 @@ input[type="url"]:valid:not(:placeholder-shown) {
   padding: 12px 20px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--sekai-radius-sm);
   font-size: 14px;
   color: var(--text-muted);
   width: 100%;
@@ -1073,7 +1103,7 @@ input[type="url"]:valid:not(:placeholder-shown) {
   padding: 2rem 1rem;
   text-align: center;
   border: 1px dashed var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--sekai-radius-md);
 }
 
 .empty-state p {
@@ -1083,7 +1113,7 @@ input[type="url"]:valid:not(:placeholder-shown) {
 .app-card {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--sekai-radius-md);
   padding: 1rem 1.15rem;
   margin-bottom: 1rem;
 }
@@ -1186,7 +1216,7 @@ input[type="url"]:valid:not(:placeholder-shown) {
   padding: 1.15rem;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--sekai-radius-md);
 }
 
 .app-form h3 {
@@ -1208,7 +1238,7 @@ input[type="url"]:valid:not(:placeholder-shown) {
   padding: 0.6rem 0.75rem;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--sekai-radius-control);
   color: var(--text-main);
   font-family: var(--code-font);
   font-size: 0.85rem;
@@ -1241,7 +1271,7 @@ input[type="url"]:valid:not(:placeholder-shown) {
   padding: 1.15rem;
   background: var(--card-bg);
   border: 1px solid rgb(var(--primary-color-mix) / 0.4);
-  border-radius: 8px;
+  border-radius: var(--sekai-radius-md);
 }
 
 .secret-reveal h3 {
@@ -1255,12 +1285,130 @@ input[type="url"]:valid:not(:placeholder-shown) {
   padding: 0.75rem;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--sekai-radius-sm);
   font-family: var(--code-font);
   font-size: 0.85rem;
   /* 48 字符的密钥必须能整串选中复制 */
   user-select: all;
   overflow-wrap: anywhere;
+}
+
+/* ========== private_key_jwt 的公钥列表 ==========
+ *
+ * 本节直接用 sekai-design 的 contract token（--sekai-*），不走上面那批
+ * 旧别名 —— 设计系统的规则是组件样式只引用 contract 里的名字，不引用
+ * 世界文件、不写裸 hex。新写的东西按新规矩来，存量的慢慢迁。
+ *
+ * 结构照搬设计系统的 .sekai-well / .sekai-well__row。它的注释点名说了
+ * 这个组件是给「彼此相关的一组行：OAuth scope、key/value 元数据、
+ * uri 列表」用的 —— 公钥列表正是这个，不该另发明一套。
+ *
+ * （本仓目前只 vendored 了 tokens/，没有 css/，所以这里是用同一套 token
+ *  复现同一套物理，而不是直接用它的类名。等哪天把 css/ 也接进来，
+ *  这几条就该整段删掉换成 .sekai-well。）
+ */
+
+/*
+ * 列表本身 = 面板上凿出来的井。
+ *
+ * 之前写反了：我把**每一行**做成了井（各自更暗 + 边框），
+ * 于是每行都在宣称自己是一口独立的坑。按设计系统的物理，
+ * 凹陷是相对所在层的 —— 一组彼此相关的行共处一口井，
+ * 井是容器，不是每一项。
+ */
+.key-list {
+  margin: var(--sekai-space-sm) 0 0;
+  padding: 0;
+  list-style: none;
+  background: linear-gradient(
+    180deg,
+    rgb(var(--sekai-surface-sunken) / 0.6) 0%,
+    rgb(var(--sekai-canvas) / 0.4) 100%
+  );
+  border: var(--sekai-hairline);
+  border-radius: var(--sekai-radius-panel);
+  /* 井口内壁背光。不是投影 —— 它没离开平面，它是被凿进去的 */
+  box-shadow: var(--sekai-elev-inset);
+  overflow: hidden;
+}
+
+/*
+ * 行与井底共面 → 只有边，没有影，也不另设填充。
+ * 分隔用极淡的一道线而不是整行换色：换色等于宣称高度差，而这里没有。
+ */
+.key-row {
+  padding: var(--sekai-space-lg);
+  border-bottom: 1px solid rgb(255 255 255 / 0.03);
+  transition: background var(--sekai-dur);
+}
+
+.key-row:last-child {
+  border-bottom: none;
+}
+
+.key-row:hover {
+  background: var(--sekai-tint-raised);
+}
+
+/*
+ * 撤销的公钥：记录还在，但它是惰性的。
+ *
+ * 与设计系统里 .sekai-btn:disabled 同一个处理（opacity 0.5）——
+ * 那条规则的物理是「失效的控件回到平面」：去掉抬起、整体压暗。
+ * 这一行本来就与井底共面，没有抬起可去，剩下的就是压暗。
+ */
+.key-row-revoked {
+  opacity: 0.5;
+}
+
+.key-row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--sekai-space-sm);
+  flex-wrap: wrap;
+}
+
+/* Key ID 是机器标识符 —— 按设计系统的分工走 mono 这一路"机器嗓音" */
+.key-row-main code {
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-label);
+  letter-spacing: var(--sekai-tracking-none);
+  /* 由用户指定，最长 128 字符 —— 必须能断行而不是横向撑破 */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* 颜色由并用的 .text-dimmed 给（= --sekai-fg-muted），这里只管排版 */
+.key-row-meta {
+  margin-top: var(--sekai-space-2xs);
+  font-size: var(--sekai-text-meta);
+}
+
+.key-row-actions {
+  display: flex;
+  gap: var(--sekai-space-sm);
+  flex-wrap: wrap;
+  margin-top: var(--sekai-space-md);
+}
+
+.key-row-actions button {
+  width: auto;
+  min-width: 80px;
+  padding: var(--sekai-space-xs) var(--sekai-space-md);
+  font-size: var(--sekai-text-label);
+}
+
+.app-form h4 {
+  margin: var(--sekai-space-2xl) 0 var(--sekai-space-sm);
+  padding-top: var(--sekai-space-lg);
+  border-top: var(--sekai-hairline-divider);
+  color: rgb(var(--sekai-fg));
+  font-size: var(--sekai-text-lg);
+}
+
+.app-form textarea[spellcheck='false'] {
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-label);
 }
 
 @media (max-width: 480px) {
@@ -1272,6 +1420,10 @@ input[type="url"]:valid:not(:placeholder-shown) {
   .app-card-actions button,
   .apps-actions button,
   .form-actions button {
+    flex: 1 1 auto;
+  }
+
+  .key-row-actions button {
     flex: 1 1 auto;
   }
 }

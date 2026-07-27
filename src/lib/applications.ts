@@ -247,12 +247,23 @@ export async function getApplication(
   return row ? rowToApplication(row as Record<string, unknown>) : null;
 }
 
-/** 创建应用。client_id / client_secret 由服务端生成，不接受调用方指定。 */
+/**
+ * 创建应用。`client_id` 由服务端生成，不接受调用方指定。
+ *
+ * **不返回 client_secret，因为本服务不用它认证任何东西。**
+ * `token_endpoint_auth_methods_supported` 只有 `none` 与 `private_key_jwt`
+ * （见 index.ts 的 discovery 文档），`authenticateClient` 也只实现这两种。
+ * 把一串随机字符标成「客户端密钥、只显示这一次」交出去，接入方会把它
+ * 配进后端，然后发现根本用不上 —— 或者更糟，以为自己的应用因此是机密的。
+ *
+ * 列仍然写（NOT NULL 约束在那儿，且哪天真加 client_secret_basic 时不用改表），
+ * 但它不会被任何接口读出来。
+ */
 export async function createApplication(
   db: D1Database,
   ownerUserId: string,
   input: ApplicationInput,
-): Promise<{ application: Application; client_secret: string }> {
+): Promise<{ application: Application }> {
   const now = Date.now();
   const id = generateId(24);
   const clientId = `app_${generateId(24)}`;
@@ -294,7 +305,6 @@ export async function createApplication(
       homepage_url: (input.homepage_url as string) || null,
       updated_at: now,
     }),
-    client_secret: clientSecret,
   };
 }
 
@@ -378,23 +388,13 @@ export async function deleteApplication(
   return true;
 }
 
-/** 轮换 client_secret。@returns 新密钥；应用不存在或不属于该用户时返回 null */
-export async function rotateClientSecret(
-  db: D1Database,
-  clientId: string,
-  ownerUserId: string,
-): Promise<string | null> {
-  const existing = await getApplication(db, clientId, ownerUserId);
-  if (!existing) return null;
-
-  const secret = generateId(48);
-  await db
-    .prepare("UPDATE applications SET client_secret = ?, updated_at = ? WHERE client_id = ? AND owner_user_id = ?")
-    .bind(secret, Date.now(), clientId, ownerUserId)
-    .run();
-
-  return secret;
-}
+/*
+ * 这里原本有个 rotateClientSecret。删掉了：轮换一个不认证任何东西的值，
+ * 只会让人以为自己刚做了一次安全操作。
+ *
+ * private_key_jwt 的密钥轮换是**真的**有意义的，走的是 client-keys.ts ——
+ * 登记新公钥、客户端换用新私钥、撤销旧公钥，三步零停机。
+ */
 
 /** 该用户是否已达到应用数量上限。 */
 export async function isAtAppLimit(db: D1Database, ownerUserId: string): Promise<boolean> {

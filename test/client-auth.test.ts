@@ -119,7 +119,16 @@ function fakeDb(options: { authMethod?: string; hasApp?: boolean; hasKey?: boole
           return null;
         },
         async run() {
-          return { success: true };
+          // 按真实的 INSERT OR IGNORE 语义返回 changes：
+          // (jti, client_id) 是主键，冲突时静默跳过、changes 为 0。
+          // 防重放的权威判定就落在这个数字上。
+          if (/INSERT OR IGNORE INTO jwt_replay_cache/.test(sql)) {
+            const jti = this.args[0] as string;
+            if (seenJti.has(jti)) return { success: true, meta: { changes: 0 } };
+            seenJti.add(jti);
+            return { success: true, meta: { changes: 1 } };
+          }
+          return { success: true, meta: { changes: 1 } };
         },
       };
     },
@@ -274,6 +283,61 @@ describe('防重放', () => {
     const r = await authWith(validClaims({ jti: 'used-jti' }), fakeDb({ seenJti: seen }));
     assert.equal(r.authenticated, false);
     assert.match(r.errorDescription!, /replay/i);
+  });
+
+  test('先查后插拦不住并发 —— 占用必须是原子的', async () => {
+    /*
+     * 两个请求带同一个 assertion 同时到达：
+     * 旧实现里两边的 SELECT 都会 miss（那时还没人写进去），
+     * 于是两边都通过认证，重放正好成立。
+     *
+     * 这里模拟这个交错：先做一次「SELECT 时还没有」的认证，
+     * 但在它写入之前，让另一个请求已经把 jti 占掉。
+     */
+    const seen = new Set<string>();
+    const db = fakeDb({ seenJti: seen });
+    const original = db.prepare.bind(db);
+    db.prepare = (sql: string) => {
+      const stmt = original(sql);
+      if (/FROM jwt_replay_cache/.test(sql)) {
+        // SELECT 一律 miss —— 模拟"另一个请求还没写进去"
+        stmt.first = async () => null;
+      }
+      return stmt;
+    };
+
+    // 另一个并发请求抢先占住了这个 jti
+    seen.add('racy');
+
+    const r = await authWith(validClaims({ jti: 'racy' }), db);
+    assert.equal(r.authenticated, false, 'SELECT 漏掉时必须靠 INSERT 兜住');
+    assert.match(r.errorDescription!, /replay/i);
+  });
+
+  test('占用写不进去时拒绝认证，而不是放行', async () => {
+    // 旧实现把 INSERT 的异常吞掉了（"storage fails 也不影响认证"）——
+    // 那等于说"防重放写不进去就不防了"，方向是反的
+    const db = fakeDb();
+    const original = db.prepare.bind(db);
+    db.prepare = (sql: string) => {
+      const stmt = original(sql);
+      if (/INSERT OR IGNORE INTO jwt_replay_cache/.test(sql)) {
+        stmt.run = async () => {
+          throw new Error('D1 write failed');
+        };
+      }
+      return stmt;
+    };
+
+    const r = await authWith(validClaims({ jti: 'write-fails' }), db);
+    assert.equal(r.authenticated, false);
+  });
+
+  test('用的是 INSERT OR IGNORE，判定落在数据库的原子性上', async () => {
+    const db = fakeDb();
+    await authWith(validClaims({ jti: 'atomic' }), db);
+    const insert = db.inserts.find((i: any) => i.sql.includes('jwt_replay_cache'));
+    assert.match(insert.sql, /INSERT OR IGNORE/);
   });
 
   test('jti 按 client 隔离查询', async () => {

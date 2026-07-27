@@ -79,50 +79,56 @@ SEKAI Pass 支持两种类型的 OAuth 客户端：
 
 ### 注册公钥
 
+在开放平台页面 `/apps` 里操作，不需要改库：
+
 1. 生成密钥对（ES256 或 RS256）
-2. 将公钥存储到 `client_keys` 表：
+2. 创建应用时把「客户端类型」选成 **机密客户端（private_key_jwt）**
+3. 在应用卡片上点「管理公钥」，贴入**公钥** JWK
 
-```sql
-INSERT INTO client_keys (
-    id,
-    client_id,
-    key_id,
-    public_key_jwk,
-    algorithm,
-    created_at,
-    status
-) VALUES (
-    'key-uuid',
-    'my-client-id',
-    'key-2024-01',
-    '{"kty":"EC","crv":"P-256","x":"...","y":"..."}',
-    'ES256',
-    1704063600000,
-    'active'
-);
+> [!WARNING]
+> 只贴公钥。私钥 JWK 只比公钥多几个字段（`d`、`p`、`q`、`dp`、`dq`、`qi`），
+> 复制时极容易带上。服务端会拒绝并明确告诉你贴错了 —— 但那时应当把那把
+> 私钥**当作已泄露**并重新生成密钥对。
+
+`key_id` 就是客户端 JWT header 里的 `kid`。留空则由服务端生成一个，
+之后在列表里能看到。
+
+### 对应的 API
+
+页面背后是这几个接口（都需要已登录会话，且按应用 owner 隔离）：
+
+```
+GET    /api/apps/:clientId/keys           列出公钥
+POST   /api/apps/:clientId/keys           登记公钥
+PATCH  /api/apps/:clientId/keys/:keyId    改状态（active / revoked）
+DELETE /api/apps/:clientId/keys/:keyId    删除
 ```
 
-3. 更新应用的认证方法：
+登记的请求体：
 
-```sql
-UPDATE applications
-SET token_endpoint_auth_method = 'private_key_jwt'
-WHERE client_id = 'my-client-id';
+```json
+{
+  "public_key_jwk": { "kty": "EC", "crv": "P-256", "x": "...", "y": "..." },
+  "algorithm": "ES256",
+  "key_id": "key-2026-01"
+}
 ```
+
+服务端在存之前会**真的把 JWK 导入一次 WebCrypto**。坐标不在曲线上、
+base64url 长度不对之类的问题在这一步就报出来 —— 否则错误会推迟到客户端
+第一次取 token，而那时的报错是"签名无效"，指向完全错误的方向。
 
 ### 密钥轮换
 
-实现零停机密钥轮换：
+零停机轮换（一个应用最多同时 10 把公钥，够用）：
 
-1. 添加新的公钥（使用不同的 `key_id`）
-2. 更新客户端使用新私钥签名
-3. 过渡期后撤销旧密钥：
+1. 登记新公钥，用不同的 `key_id`
+2. 客户端改用新私钥签名（JWT header 的 `kid` 跟着换）
+3. 过渡期结束后把旧公钥**撤销**
 
-```sql
-UPDATE client_keys
-SET status = 'revoked'
-WHERE client_id = 'my-client-id' AND key_id = 'old-key-id';
-```
+撤销用 `PATCH ... { "status": "revoked" }`，而不是删除 —— 记录留着，
+排查"客户端说签名对了、服务端说找不到 key"时，"撤销了"和"从来没有过"
+是完全不同的两件事。撤销是可逆的，改回 `active` 即可。
 
 ### 多密钥支持
 

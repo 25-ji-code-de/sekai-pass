@@ -65,7 +65,7 @@ ID Token 是一个 JWT，包含以下声明：
   "nonce": "random-nonce",
   "name": "User Name",
   "email": "user@example.com",
-  "email_verified": true
+  "email_verified": false
 }
 ```
 

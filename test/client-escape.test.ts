@@ -170,6 +170,20 @@ function htmlTemplates(source: string): string[] {
 }
 
 /**
+ * 剥掉 JS 注释。
+ *
+ * 「代码里不该再出现某个名字」这类断言，必须只看代码 ——
+ * 解释「为什么删掉它」的注释里当然会提到那个名字，
+ * 不剥的话这类断言永远过不了，只能被迫写模糊的注释。
+ *
+ * 简化实现：不处理字符串字面量里出现的 `//`。本文件扫的是模板字符串
+ * 拼 HTML 的页面代码，没有那种情况。
+ */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+/**
  * 取出一个模板里**真正会被渲染**的插值。
  *
  * 关键是递归：`${cond ? `<p>${escapeHtml(x)}</p>` : ''}` 这种嵌套模板，
@@ -278,6 +292,50 @@ describe('开放平台页的转义覆盖率（静态扫描）', () => {
 
   test('用户填的 Key ID 回显时被转义', () => {
     assert.match(source, /\$\{escapeHtml\(k\.key_id\)\}/);
+  });
+
+  test('不再有 client_secret 那一套 —— 它认证不了任何东西', () => {
+    /*
+     * SEKAI Pass 的 token_endpoint_auth_methods_supported 只有
+     * `none` 与 `private_key_jwt`，服务端从来不拿 client_secret 认证。
+     * 页面上给一串「只显示这一次」的随机字符，接入方会把它配进后端，
+     * 然后发现根本用不上 —— 或者更糟，以为自己因此是机密客户端。
+     */
+    /*
+     * 禁的是**读取/传递**这个字段，不是提到这个词 ——
+     * 新那一屏有一句给开发者看的正文就写着「没有 client_secret」，
+     * 那是有意的，正是这次修正要传达的信息。
+     */
+    const code = stripComments(source);
+    assert.ok(
+      !/\bclient_secret\s*[:=]|\.\s*client_secret\b/.test(code),
+      '页面还在读写 client_secret 字段',
+    );
+    assert.ok(!/rotate-secret/.test(code), '页面还在调轮换密钥接口');
+    assert.ok(!/只显示这一次/.test(code), '还留着「只显示这一次」的说法');
+  });
+
+  test('创建成功那一屏不会被随后清空', () => {
+    /*
+     * showNextSteps 写的就是 app-form-container。原来这里无条件
+     * `container.innerHTML = ''`，等于刚渲染完就擦掉 ——
+     * 创建成功后那一屏从来没真的显示出来过。
+     */
+    // 只取提交处理函数的 try 块 —— 往后取会扫进 showNextSteps 自己的实现
+    const tryBlock = /f-submit'\)\.addEventListener[\s\S]*?try \{([\s\S]*?)\n      \} catch/.exec(
+      source,
+    )?.[1];
+    assert.ok(tryBlock, '找不到提交处理函数的 try 块');
+
+    // 剥掉注释：解释这段历史的注释里就写着这行代码的字面量
+    const code = stripComments(tryBlock!);
+
+    const clears = [...code.matchAll(/container\.innerHTML = ''/g)];
+    assert.equal(clears.length, 1, '清空只应该发生在编辑分支里');
+    assert.ok(
+      code.indexOf("container.innerHTML = ''") < code.indexOf('showNextSteps'),
+      '清空必须在编辑分支内，不能跟在 showNextSteps 后面',
+    );
   });
 });
 

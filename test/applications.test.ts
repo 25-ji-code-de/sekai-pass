@@ -23,7 +23,6 @@ import {
   createApplication,
   updateApplication,
   deleteApplication,
-  rotateClientSecret,
   isAtAppLimit,
   MAX_REDIRECT_URIS,
   MAX_NAME_LEN,
@@ -225,13 +224,31 @@ describe('rowToApplication', () => {
 });
 
 describe('创建', () => {
-  test('client_id / client_secret 由服务端生成', async () => {
+  test('client_id 由服务端生成', async () => {
     const db = fakeDb();
-    const { application, client_secret } = await createApplication(db, OWNER, validInput);
+    const { application } = await createApplication(db, OWNER, validInput);
 
     assert.match(application.client_id, /^app_[A-Za-z0-9]{24}$/);
-    assert.match(client_secret, /^[A-Za-z0-9]{48}$/);
     assert.equal(application.owner_user_id, OWNER);
+  });
+
+  test('不返回 client_secret —— 本服务不用它认证任何东西', async () => {
+    /*
+     * token_endpoint_auth_methods_supported 只有 none 与 private_key_jwt
+     * （见 index.ts 的 discovery 文档），authenticateClient 也只实现这两种。
+     * 把一串随机字符标成「客户端密钥」交出去，接入方会把它配进后端，
+     * 然后发现根本用不上 —— 或者更糟，以为自己的应用因此是机密的。
+     */
+    const db = fakeDb();
+    const created = await createApplication(db, OWNER, validInput);
+    assert.deepEqual(Object.keys(created), ['application']);
+  });
+
+  test('列仍然写，NOT NULL 约束在那儿', async () => {
+    // 哪天真加 client_secret_basic 时不用改表；但它不会被任何接口读出来
+    const db = fakeDb();
+    await createApplication(db, OWNER, validInput);
+    assert.match(String(db.table[0].client_secret), /^[A-Za-z0-9]{48}$/);
   });
 
   test('不接受调用方指定 client_id 或 owner', async () => {
@@ -301,17 +318,11 @@ describe('权限隔离 —— 每个操作都必须按 owner 过滤', () => {
     assert.ok(await getApplication(db, clientId, OWNER), '应用必须还在');
   });
 
-  test('轮换密钥：换个 owner 转不了', async () => {
-    const { db, clientId } = await seeded();
-    assert.equal(await rotateClientSecret(db, clientId, OTHER), null);
-  });
-
   test('不存在的 client_id 一律返回空而不是抛异常', async () => {
     const db = fakeDb();
     assert.equal(await getApplication(db, 'nope', OWNER), null);
     assert.equal(await updateApplication(db, 'nope', OWNER, { name: 'x' }), null);
     assert.equal(await deleteApplication(db, 'nope', OWNER), false);
-    assert.equal(await rotateClientSecret(db, 'nope', OWNER), null);
   });
 });
 
@@ -370,12 +381,12 @@ describe('删除会级联清理', () => {
   });
 });
 
-describe('轮换密钥', () => {
-  test('返回新密钥且与旧的不同', async () => {
-    const db = fakeDb();
-    const { application, client_secret } = await createApplication(db, OWNER, validInput);
-    const rotated = await rotateClientSecret(db, application.client_id, OWNER);
-    assert.match(rotated!, /^[A-Za-z0-9]{48}$/);
-    assert.notEqual(rotated, client_secret);
+describe('没有假的密钥轮换', () => {
+  test('applications.ts 不再导出 rotateClientSecret', async () => {
+    // 轮换一个不认证任何东西的值，只会让人以为自己刚做了一次安全操作。
+    // 真正有意义的密钥轮换在 client-keys.ts：登记新公钥 → 客户端换用
+    // 新私钥 → 撤销旧公钥。
+    const mod = await import('../src/lib/applications.ts');
+    assert.ok(!('rotateClientSecret' in mod), '这个函数应当已经删掉');
   });
 });

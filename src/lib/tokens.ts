@@ -191,7 +191,21 @@ export async function revokeRefreshToken(
     "DELETE FROM refresh_tokens WHERE token = ?"
   ).bind(token).run();
 
-  return result.success;
+  /*
+   * 看 `meta.changes`，不看 `success`。
+   *
+   * D1 的 `success` 表示**语句执行成功** —— 删了 0 行也是 true。
+   * 用它当返回值，这个函数就恒返回 true，而调用方是这么用的：
+   *
+   *     const revoked = await revokeRefreshToken(db, token, true);
+   *     if (revoked) return c.json({ success: true }, 200);   // 永远走这里
+   *
+   * 于是 /oauth/revoke 里紧随其后的「撤 access token」那段**根本不可达**
+   * （除非客户端显式传了 token_type_hint=access_token）。
+   * 也就是说：不带 hint 撤一个 access token，服务器返回 200，
+   * 而那个 token 一直有效到过期。
+   */
+  return ((result as any).meta?.changes ?? 0) > 0;
 }
 
 /**

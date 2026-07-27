@@ -30,6 +30,7 @@ import {
 } from "./lib/oidc-discovery.ts";
 import { getPublicKeys, checkAndRotateKeys } from "./lib/keys.ts";
 import { bearerChallenge } from "./lib/bearer-challenge.ts";
+import { revokeToken } from "./lib/revoke.ts";
 import { authenticateClient } from "./lib/client-auth.ts";
 import * as html from "./lib/html.ts";
 import { apiRouter } from "./lib/api.ts";
@@ -711,27 +712,14 @@ app.post("/oauth/revoke", async (c) => {
     return c.json({ error: "invalid_request" }, 400);
   }
 
-  // Try to revoke as refresh token first (or if hinted)
-  if (!tokenTypeHint || tokenTypeHint === "refresh_token") {
-    const revoked = await revokeRefreshToken(c.env.DB, token, true);
-    if (revoked) {
-      return c.json({ success: true }, 200);
-    }
-  }
-
-  // Try to revoke as access token
-  if (!tokenTypeHint || tokenTypeHint === "access_token") {
-    const revoked = await c.env.DB.prepare(
-      "DELETE FROM access_tokens WHERE token = ?"
-    ).bind(token).run();
-
-    if (revoked.success) {
-      return c.json({ success: true }, 200);
-    }
-  }
-
-  // RFC 7009: The authorization server responds with HTTP status code 200
-  // even if the token does not exist or is invalid
+  /*
+   * 撤销逻辑在 lib/revoke.ts —— 那里能用真 SQL 测。
+   *
+   * 返回值故意不影响状态码：RFC 7009 §2.2 要求 token 不存在或无效时
+   * **也返回 200**。把「没删到」变成 4xx 会让客户端的登出流程报错，
+   * 而那时候本来就该当作已登出。
+   */
+  await revokeToken(c.env.DB, token, tokenTypeHint);
   return c.json({ success: true }, 200);
 });
 

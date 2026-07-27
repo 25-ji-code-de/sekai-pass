@@ -21,6 +21,7 @@
 import type { Context, Next } from "hono";
 import type { D1Database } from "@cloudflare/workers-types";
 import { validateAccessToken } from "./tokens.ts";
+import { bearerChallenge } from "./bearer-challenge.ts";
 
 /**
  * Supported OAuth scopes
@@ -90,6 +91,8 @@ export function requireScopes(requiredScopes: Scope[]) {
     const authorization = c.req.header("Authorization");
 
     if (!authorization || !authorization.startsWith("Bearer ")) {
+      // 完全没带凭据 —— 按 RFC 6750 §3 不发 error 码，只发裸的 Bearer
+      c.header("WWW-Authenticate", bearerChallenge());
       return c.json({
         error: "unauthorized",
         error_description: "Missing or invalid Authorization header"
@@ -103,6 +106,10 @@ export function requireScopes(requiredScopes: Scope[]) {
     const tokenInfo = await validateAccessToken(db, token);
 
     if (!tokenInfo) {
+      c.header(
+        "WWW-Authenticate",
+        bearerChallenge("invalid_token", "Access token is invalid or expired")
+      );
       return c.json({
         error: "invalid_token",
         error_description: "Access token is invalid or expired"
@@ -111,6 +118,15 @@ export function requireScopes(requiredScopes: Scope[]) {
 
     // Check scopes
     if (!hasScopes(tokenInfo.scope, requiredScopes)) {
+      // RFC 6750 §3.1：insufficient_scope 也要发挑战头，并带上需要的 scope
+      c.header(
+        "WWW-Authenticate",
+        bearerChallenge(
+          "insufficient_scope",
+          `This endpoint requires scopes: ${formatScopes(requiredScopes)}`,
+          formatScopes(requiredScopes)
+        )
+      );
       return c.json({
         error: "insufficient_scope",
         error_description: `This endpoint requires scopes: ${formatScopes(requiredScopes)}`,

@@ -8,7 +8,7 @@
  *
  * ID Token 是依赖方用来断言「用户是谁」的凭据，里面放了什么就等于披露了什么。
  *
- * 这里有一处**三方不一致**（见 issue，本测试只钉住现状、不改行为）：
+ * 曾经有一处**三方不一致**（已修，见「admin scope：三方必须一致」一节）：
  * 对 admin scope，三个描述「能看到什么」的函数各说各话 ——
  *   buildIDTokenClaims  → 给全部 profile + email 字段（用 hasScopes，admin 一票通过）
  *   filterUserData      → 空对象（用 includes，admin 不含 profile）
@@ -264,23 +264,29 @@ describe('按 scope 披露用户字段', () => {
   });
 });
 
-describe('admin scope 的三方不一致（钉住现状，见 issue）', () => {
+describe('admin scope：三方必须一致', () => {
+  /*
+   * 这一组此前叫「三方不一致（钉住现状）」，最后一条断言的是矛盾本身，
+   * 注释写着「修复方向确定后应当改成三者一致」。方向已经确定了 ——
+   * **意图本来就写在代码里**，`oidc-scope.ts` 里：
+   *
+   *     // applications and admin scopes don't add claims to ID token
+   *
+   * `getClaimsForScope` 照做了，`buildIDTokenClaims` 没有：它用 `hasScopes`，
+   * 而那个函数里「admin 一票通过」是给**授权判断**用的，对**披露判断**是错的。
+   *
+   * 后果：只申请 `admin` 的客户端，ID Token 里白拿到 email / name / bio /
+   * picture —— 它既没申请 profile 也没申请 email，用户在授权页上也没看到。
+   *
+   * 已改成按 `granted.includes(...)` 判断。
+   */
   const ADMIN = 'admin';
 
-  test('ID Token 给全部 profile + email 字段', () => {
-    // buildIDTokenClaims 用 hasScopes，而 hasScopes 里 admin 一票通过
-    assert.deepEqual(userClaims(build(ADMIN)), [
-      'bio',
-      'email',
-      'email_verified',
-      'name',
-      'picture',
-      'preferred_username',
-    ]);
+  test('ID Token 不含任何用户字段', () => {
+    assert.deepEqual(userClaims(build(ADMIN)), []);
   });
 
-  test('userinfo 端点却什么都不给', () => {
-    // filterUserData 用 includes，admin 不含 profile/email
+  test('userinfo 端点也不给', () => {
     assert.deepEqual(filterUserData(user, ADMIN), {});
   });
 
@@ -288,16 +294,40 @@ describe('admin scope 的三方不一致（钉住现状，见 issue）', () => {
     assert.deepEqual(getClaimsForScope(ADMIN), ['sub']);
   });
 
-  test('三者对同一个 scope 的答案互相矛盾', () => {
+  test('三者对同一个 scope 给同一个答案', () => {
     const inIdToken = userClaims(build(ADMIN)).length;
     const inUserinfo = Object.keys(filterUserData(user, ADMIN)).length;
     const declared = getClaimsForScope(ADMIN).filter((c) => c !== 'sub').length;
 
-    assert.ok(inIdToken > 0, 'ID Token 给了字段');
-    assert.equal(inUserinfo, 0, 'userinfo 一个不给');
+    assert.equal(inIdToken, 0, 'ID Token 不该给用户字段');
+    assert.equal(inUserinfo, 0, 'userinfo 不该给');
     assert.equal(declared, 0, '声明里也说没有');
-    // 这条断言就是矛盾本身。修复方向确定后应当改成三者一致。
-    assert.notEqual(inIdToken, declared, '现状：ID Token 比声明的多');
+    assert.equal(inIdToken, declared, 'ID Token 与对外声明必须一致');
+  });
+
+  test('admin 与别的 scope 一起给时，按别的那个算', () => {
+    // admin 不该「顺带」放大别的 scope，也不该把它们吃掉
+    assert.deepEqual(userClaims(build('admin profile')), [
+      'bio',
+      'name',
+      'picture',
+      'preferred_username',
+    ]);
+    assert.deepEqual(userClaims(build('admin email')), ['email', 'email_verified']);
+  });
+
+  test('披露判断不再用 hasScopes', () => {
+    /*
+     * `hasScopes` 仍然是授权判断的正确工具，别处照用 ——
+     * 这里钉的是「buildIDTokenClaims 里不用它」。
+     */
+    const src = readFileSync(join(root, 'src/lib/id-token.ts'), 'utf8');
+    const fn = /export function buildIDTokenClaims[\s\S]*?\n\}/.exec(src)?.[0] ?? '';
+    assert.ok(fn, '找不到 buildIDTokenClaims');
+    // 剥掉注释再判断 —— 解释「为什么不用它」的注释里当然会提到这个名字
+    const code = fn.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    assert.doesNotMatch(code, /hasScopes\(/, 'buildIDTokenClaims 又用回了 hasScopes');
+    assert.match(code, /granted\.includes\(/, '没有改用显式的 scope 成员判断');
   });
 });
 

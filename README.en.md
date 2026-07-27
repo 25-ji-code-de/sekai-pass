@@ -46,6 +46,8 @@ Then, fill the `database_id` in the `wrangler.toml` with the `database_id` showe
 
 ### 3. Create Database Structure
 
+**For a fresh database:**
+
 ```bash
 # Development(Local)
 npx wrangler d1 execute sekai_pass_db --local --file=./schema.sql
@@ -53,6 +55,21 @@ npx wrangler d1 execute sekai_pass_db --local --file=./schema.sql
 # Production(Online)
 npx wrangler d1 execute sekai_pass_db --remote --file=./schema.sql
 ```
+
+**For a database that is already running:** the command above will not help you.
+`schema.sql` is entirely `CREATE TABLE IF NOT EXISTS`, so it adds **no columns**
+to tables that already exist — it succeeds quietly, and then you get 500s on the
+endpoints that use the new columns. To upgrade, run:
+
+```bash
+npm run migrate              # local database
+npm run migrate -- --remote  # production database
+```
+
+It reads `pragma_table_info` first and only adds the columns that are missing, so
+running it repeatedly — or resuming after an interrupted migration — is safe. When
+it finishes it also lists any pre-existing applications that have no owner (and are
+therefore invisible in the open platform), along with the SQL to claim them.
 
 ### 4. Configure KV Namespace for OIDC_KEYS storage
 
@@ -100,27 +117,38 @@ npm run deploy
 
 ### Register your application using OAuth 
 
-To integrate SSO into your application , it's nescessary to register your application first.
+Log in, then click **开放平台** on the dashboard (or go to `/apps` directly) to create,
+edit and delete your own applications. No database access required.
+
+There is also an API:
 
 ```bash
-# Development(Local)
-npx wrangler d1 execute sekai_pass_db --local --command "
-INSERT INTO applications (id, name, client_id, client_secret, redirect_uris, created_at)
-VALUES (
-  'app-' || hex(randomblob(8)),
-  'My Application',
-  'client-' || hex(randomblob(12)),
-  'secret-' || hex(randomblob(16)),
-  '[\"http://localhost:3000/callback\",\"http://localhost:8080/callback\"]',
-  $(date +%s)000
-)
-RETURNING client_id, client_secret;"
-
-# Production(Online), use --remote switch instead of --local
-npx wrangler d1 execute sekai_pass_db --remote --command "..."
+curl -X POST https://id.nightcord.de5.net/api/apps \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_SESSION" \
+  -d '{
+    "name": "My Application",
+    "redirect_uris": ["http://localhost:3000/callback"],
+    "token_endpoint_auth_method": "none"
+  }'
 ```
 
-**IMPORTANT**: Save the `client_id` and `client_secret` in the output.
+The `client_id` in the response is what you need. **No `client_secret` is returned** —
+this service supports exactly two client authentication methods:
+
+| Method | For | Credential |
+| --- | --- | --- |
+| `none` | SPAs, mobile apps, anything running on a user's device | `client_id` only; security comes from PKCE |
+| `private_key_jwt` | Applications with a backend that need to prove their identity | You generate the key pair and register the **public** key at `/apps/:clientId/keys` |
+
+With `private_key_jwt` the private key never leaves your machine, and `/oauth/token`
+never accepts a `client_secret`.
+
+> **Pre-existing applications:** apps inserted into the database by hand before the open
+> platform shipped have no `owner_user_id`, so they are invisible there. That is owner
+> scoping working as intended, not a fault. To claim them, see
+> [`migrations/0001_open_platform.sql`](./migrations/0001_open_platform.sql), or just run
+> `npm run migrate` — it lists such applications and prints the SQL to claim them.
 
 ### Procedure of OAuth 2.1
 
@@ -191,9 +219,16 @@ Response:
   "picture": "https://storage.nightcord.de5.net/avatars/xxx.webp",
   "bio": "Hello, SEKAI",
   "email": "user@example.com",
-  "email_verified": true
+  "email_verified": false
 }
 ```
+
+> **`email_verified` is always `false`** — this service has no email verification flow
+> (registration only requires the address to be unique; no confirmation mail is sent).
+> **Do not use this `email` for account linking**: if you trust an unverified address,
+> anyone can register here with a victim's email and take over that victim's account on
+> *your* side. If you want to link by email, send your own confirmation mail. See the
+> [OIDC implementation notes](./docs/features/oidc/implementation.md#email_verified-恒为-false).
 
 #### 4. Refresh Access Token
 
@@ -258,7 +293,7 @@ ID Token is a JWT containing user information：
   "name": "Display Name",
   "preferred_username": "username",
   "email": "user@example.com",
-  "email_verified": true
+  "email_verified": false
 }
 ```
 

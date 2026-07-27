@@ -20,7 +20,8 @@ export async function renderDashboard(app, api, navigate) {
         <p><strong>加载中...</strong></p>
       </div>
       <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-        <button id="settings-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: auto; min-width: 120px;">账号设置</button>
+        <button id="apps-btn" class="btn-auto">开放平台</button>
+          <button id="settings-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: auto; min-width: 120px;">账号设置</button>
         <button id="logout-btn" class="btn-secondary btn-auto">退出登录</button>
       </div>
       <div style="clear: both;"></div>
@@ -53,6 +54,8 @@ export async function renderDashboard(app, api, navigate) {
   }
 
   // Handle settings
+  document.getElementById('apps-btn').addEventListener('click', () => navigate('/apps'));
+
   const settingsBtn = document.getElementById('settings-btn');
   settingsBtn.addEventListener('click', () => {
     navigate('/settings');

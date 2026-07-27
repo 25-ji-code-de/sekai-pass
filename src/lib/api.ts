@@ -33,6 +33,7 @@ import {
   validateApplicationInput,
   MAX_APPS_PER_USER,
 } from "./applications.ts";
+import { isUniqueConstraintError } from "./db-errors.ts";
 import {
   listClientKeys,
   addClientKey,
@@ -530,6 +531,17 @@ apiRouter.post("/auth/register", async (c) => {
       "Pragma": "no-cache"
     });
   } catch (error) {
+    /*
+     * 并发注册：两个请求都通过了上面那个 SELECT，UNIQUE 约束拦下了第二个。
+     *
+     * 约束才是真正的守卫（它保证了不会有重复账号）；上面的 SELECT 只是为了
+     * 给出好的错误消息。所以约束触发时也得给出**同样的**消息 ——
+     * 否则用户看到的是一个像服务端故障的 500，而实际原因是「用户名被占了」，
+     * 重试多少次都一样。
+     */
+    if (isUniqueConstraintError(error)) {
+      return c.json({ error: "用户名或邮箱已被使用" }, 400);
+    }
     console.error("Registration error:", error);
     return c.json({ error: "注册失败，请重试" }, 500);
   }

@@ -16,13 +16,19 @@ GET /.well-known/oauth-authorization-server
   "authorization_endpoint": "https://id.nightcord.de5.net/oauth/authorize",
   "token_endpoint": "https://id.nightcord.de5.net/oauth/token",
   "userinfo_endpoint": "https://id.nightcord.de5.net/oauth/userinfo",
+  "jwks_uri": "https://id.nightcord.de5.net/.well-known/jwks.json",
+  "revocation_endpoint": "https://id.nightcord.de5.net/oauth/revoke",
   "response_types_supported": ["code"],
   "grant_types_supported": ["authorization_code", "refresh_token"],
   "code_challenge_methods_supported": ["S256"],
   "token_endpoint_auth_methods_supported": ["none", "private_key_jwt"],
   "token_endpoint_auth_signing_alg_values_supported": ["ES256", "RS256"],
+  "revocation_endpoint_auth_methods_supported": ["none"],
+  "scopes_supported": ["openid", "profile", "email", "applications", "admin"],
   "service_documentation": "https://id.nightcord.de5.net/docs",
-  "ui_locales_supported": ["zh-CN", "en-US"]
+  "ui_locales_supported": ["zh-CN", "en-US"],
+  "require_pushed_authorization_requests": false,
+  "require_request_uri_registration": false
 }
 ```
 

@@ -22,7 +22,7 @@ import type { D1Database, KVNamespace } from "@cloudflare/workers-types";
 import { signJWT, verifyJWT, decodeJWT } from "./jwt.ts";
 import { getCurrentSigningKey, getSigningKeyByKid } from "./keys.ts";
 import { getClaimsForScope } from "./oidc-scope.ts";
-import { SCOPES, hasScopes } from "./scope.ts";
+import { SCOPES, parseScopes } from "./scope.ts";
 
 /**
  * `email_verified` 的值。
@@ -123,7 +123,28 @@ export function buildIDTokenClaims(
   }
 
   // Add claims based on scope
-  if (hasScopes(scope, [SCOPES.PROFILE])) {
+  /*
+   * ── 披露用 `granted.includes(...)`，不用 `hasScopes` ─────────────
+   *
+   * `hasScopes` 里有一条「admin 一票通过」：
+   *
+   *     if (grantedScopes.includes(SCOPES.ADMIN)) return true;
+   *
+   * 那是给**授权判断**用的（「这个 token 能不能做 X」），对**披露判断**
+   * （「这个 token 里该放什么」）是错的。用它的后果是：只申请 `admin` 的
+   * 客户端，ID Token 里白拿到 email / name / bio / picture ——
+   * 它既没申请 `profile` 也没申请 `email`，用户在授权页上也没看到这两项。
+   *
+   * 而意图本来就写在代码里，`oidc-scope.ts` 的 `getClaimsForScope`：
+   *
+   *     // applications and admin scopes don't add claims to ID token
+   *
+   * 那个函数照做了，这里没有 —— 于是同一个问题有两个答案，
+   * 而 discovery 对外声称的是那一个。
+   */
+  const granted = parseScopes(scope);
+
+  if (granted.includes(SCOPES.PROFILE)) {
     claims.name = user.display_name;
     claims.preferred_username = user.username;
     if (user.avatar_url) {
@@ -134,7 +155,7 @@ export function buildIDTokenClaims(
     }
   }
 
-  if (hasScopes(scope, [SCOPES.EMAIL])) {
+  if (granted.includes(SCOPES.EMAIL)) {
     claims.email = user.email;
     claims.email_verified = EMAIL_VERIFIED;
   }

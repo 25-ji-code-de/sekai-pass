@@ -29,6 +29,7 @@ import {
   generateAuthorizationServerMetadata
 } from "./lib/oidc-discovery.ts";
 import { getPublicKeys, checkAndRotateKeys } from "./lib/keys.ts";
+import { bearerChallenge } from "./lib/bearer-challenge.ts";
 import { authenticateClient } from "./lib/client-auth.ts";
 import * as html from "./lib/html.ts";
 import { apiRouter } from "./lib/api.ts";
@@ -170,7 +171,14 @@ app.use("/oauth/*", cors({
   origin: "*",
   allowMethods: ["GET", "POST", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"],
-  exposeHeaders: ["Content-Length"],
+  /*
+   * WWW-Authenticate 必须列进 exposeHeaders，否则**浏览器里的客户端读不到它**。
+   *
+   * 跨域响应默认只暴露 CORS 安全清单里那几个头，其余一律被 fetch 屏蔽 ——
+   * 服务端发了、DevTools 里也看得见，但 `res.headers.get(...)` 返回 null。
+   * 那等于白发：本服务的客户端全是浏览器里的 SPA。
+   */
+  exposeHeaders: ["Content-Length", "WWW-Authenticate"],
   maxAge: 600,
   credentials: false,
 }));
@@ -627,6 +635,8 @@ app.get("/oauth/userinfo", async (c) => {
   const authorization = c.req.header("Authorization");
 
   if (!authorization || !authorization.startsWith("Bearer ")) {
+    // 完全没带凭据 —— 按 RFC 6750 §3 不发 error 码，只发裸的 Bearer
+    c.header("WWW-Authenticate", bearerChallenge());
     return c.json({ error: "unauthorized" }, 401);
   }
 
@@ -636,6 +646,10 @@ app.get("/oauth/userinfo", async (c) => {
   const tokenInfo = await validateAccessToken(c.env.DB, token);
 
   if (!tokenInfo) {
+    c.header(
+      "WWW-Authenticate",
+      bearerChallenge("invalid_token", "The access token is invalid or expired")
+    );
     return c.json({ error: "invalid_token" }, 401);
   }
 
@@ -645,6 +659,14 @@ app.get("/oauth/userinfo", async (c) => {
   ).bind(tokenInfo.userId).first();
 
   if (!user) {
+    /*
+     * token 有效但用户行没了（比如账号已删除）。
+     * 对客户端而言这把 token 就是不能用了 —— 与 invalid_token 同一类。
+     */
+    c.header(
+      "WWW-Authenticate",
+      bearerChallenge("invalid_token", "The access token is invalid or expired")
+    );
     return c.json({ error: "invalid_token" }, 401);
   }
 

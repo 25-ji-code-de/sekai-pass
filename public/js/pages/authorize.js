@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { showError, getQueryParams, setLoading } from '../utils.js';
+import { showError, getQueryParams, setLoading, escapeHtml } from '../utils.js';
 
 export async function renderAuthorize(app, api, navigate) {
   const token = localStorage.getItem('token');
@@ -46,8 +46,8 @@ export async function renderAuthorize(app, api, navigate) {
       headers: api.getAuthHeaders()
     });
 
-    const initial = appInfo.name ? appInfo.name.charAt(0).toUpperCase() : 'A';
-    const userInitial = (user.username || 'U').charAt(0).toUpperCase();
+    const initial = appInfo.name ? escapeHtml(appInfo.name).charAt(0).toUpperCase() : 'A';
+    const userInitial = escapeHtml(user.username || 'U').charAt(0).toUpperCase();
 
     // Parse scopes to display
     const scopeParam = getQueryParams().scope;
@@ -84,7 +84,7 @@ export async function renderAuthorize(app, api, navigate) {
     const defaultIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>';
 
     const scopeListHtml = scopes.map(scope => {
-      const detail = scopeDetails[scope] || { label: scope, desc: '未知的权限类型', icon: defaultIcon };
+      const detail = scopeDetails[scope] || { label: escapeHtml(scope), desc: '未知的权限类型', icon: defaultIcon };
       return `
         <div class="scope-item">
           <div class="scope-icon-box">
@@ -93,7 +93,7 @@ export async function renderAuthorize(app, api, navigate) {
           <div class="scope-content">
             <div class="scope-name">
               ${detail.label}
-              <span class="scope-tag">${scope}</span>
+              <span class="scope-tag">${escapeHtml(scope)}</span>
             </div>
             <div class="scope-desc">${detail.desc}</div>
           </div>
@@ -103,7 +103,7 @@ export async function renderAuthorize(app, api, navigate) {
 
     let redirectHost = 'Unknown';
     try {
-        redirectHost = new URL(redirect_uri).hostname;
+        redirectHost = escapeHtml(new URL(redirect_uri).hostname);
     } catch(e) {}
 
     const authContent = document.getElementById('auth-content');
@@ -134,10 +134,10 @@ export async function renderAuthorize(app, api, navigate) {
 
         <h2 class="auth-title-large">授权访问请求</h2>
         <p class="auth-subtitle-large">
-          应用 <strong>${appInfo.name}</strong> 正在请求访问您的账号
+          应用 <strong>${escapeHtml(appInfo.name)}</strong> 正在请求访问您的账号
           <br>
           <span class="user-badge-text" style="font-size: 11px; margin-top: 6px; display: inline-block; padding: 2px 8px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
-            <span style="opacity: 0.6;">登录身份:</span> <strong style="color: var(--text-main);">${user.username}</strong>
+            <span style="opacity: 0.6;">登录身份:</span> <strong style="color: var(--text-main);">${escapeHtml(user.username)}</strong>
           </span>
         </p>
 

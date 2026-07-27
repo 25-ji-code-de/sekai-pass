@@ -1,5 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Client-side encryption utilities
+
+/**
+ * HTML 实体转义。所有插入 innerHTML 的动态值必须经过此函数。
+ * 转义 & < > " ' —— 覆盖属性注入和标签拆解两种 XSS 场景。
+ */
+export function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export async function encryptPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');

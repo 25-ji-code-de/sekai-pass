@@ -16,6 +16,21 @@
 
 
 
+/**
+ * HTML 实体转义。防御 XSS：所有插入 HTML 的动态值必须经过此函数。
+ *
+ * 转义 `&`、`<`、`>`、`"`、`'` —— 覆盖属性值（`"` / `'` 包围）和
+ * 文本节点（`<` / `>` 拆标签）两种注入场景。
+ */
+export function escapeHtml(str: unknown): string {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function renderPage(title: string, content: string): string {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -46,14 +61,14 @@ export function renderPage(title: string, content: string): string {
 }
 
 export function authorizePage(app: any, user: any): string {
-  const initial = app.name ? app.name.charAt(0).toUpperCase() : 'A';
-  const userInitial = (user.username || user.email || 'U').charAt(0).toUpperCase();
+  const initial = app.name ? escapeHtml(app.name).charAt(0).toUpperCase() : 'A';
+  const userInitial = escapeHtml(user.username || user.email || 'U').charAt(0).toUpperCase();
 
   // Safe redirect URI display
   let redirectHost = 'Unknown';
   try {
     if (app.redirect_uri) {
-      redirectHost = new URL(app.redirect_uri).hostname;
+      redirectHost = escapeHtml(new URL(app.redirect_uri).hostname);
     }
   } catch (e) {}
 
@@ -92,7 +107,7 @@ export function authorizePage(app: any, user: any): string {
   const defaultIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>';
 
   const scopeListHtml = scopes.map((scope: string) => {
-    const detail = scopeDetails[scope] || { label: scope, desc: '未知的权限类型', icon: defaultIcon };
+    const detail = scopeDetails[scope] || { label: escapeHtml(scope), desc: '未知的权限类型', icon: defaultIcon };
     return `
       <div class="scope-item">
         <div class="scope-icon-box">
@@ -101,7 +116,7 @@ export function authorizePage(app: any, user: any): string {
         <div class="scope-content">
           <div class="scope-name">
             ${detail.label}
-            <span class="scope-tag">${scope}</span>
+            <span class="scope-tag">${escapeHtml(scope)}</span>
           </div>
           <div class="scope-desc">${detail.desc}</div>
         </div>
@@ -137,10 +152,10 @@ export function authorizePage(app: any, user: any): string {
 
       <h2 class="auth-title-large">授权访问请求</h2>
       <p class="auth-subtitle-large">
-        应用 <strong>${app.name}</strong> 正在请求访问您的账号
+        应用 <strong>${escapeHtml(app.name)}</strong> 正在请求访问您的账号
         <br>
         <span class="user-badge-text">
-          <span class="text-dimmed">登录身份:</span> ${user.username}
+          <span class="text-dimmed">登录身份:</span> ${escapeHtml(user.username)}
         </span>
       </p>
 
@@ -149,13 +164,13 @@ export function authorizePage(app: any, user: any): string {
       </div>
 
       <form method="POST" action="/oauth/authorize">
-        <input type="hidden" name="client_id" value="${app.client_id}">
-        <input type="hidden" name="redirect_uri" value="${app.redirect_uri}">
-        ${app.code_challenge ? `<input type="hidden" name="code_challenge" value="${app.code_challenge}">` : ''}
-        ${app.code_challenge_method ? `<input type="hidden" name="code_challenge_method" value="${app.code_challenge_method}">` : ''}
-        ${app.state ? `<input type="hidden" name="state" value="${app.state}">` : ''}
-        ${app.scope ? `<input type="hidden" name="scope" value="${app.scope}">` : ''}
-        ${app.nonce ? `<input type="hidden" name="nonce" value="${app.nonce}">` : ''}
+        <input type="hidden" name="client_id" value="${escapeHtml(app.client_id)}">
+        <input type="hidden" name="redirect_uri" value="${escapeHtml(app.redirect_uri)}">
+        ${app.code_challenge ? `<input type="hidden" name="code_challenge" value="${escapeHtml(app.code_challenge)}">` : ''}
+        ${app.code_challenge_method ? `<input type="hidden" name="code_challenge_method" value="${escapeHtml(app.code_challenge_method)}">` : ''}
+        ${app.state ? `<input type="hidden" name="state" value="${escapeHtml(app.state)}">` : ''}
+        ${app.scope ? `<input type="hidden" name="scope" value="${escapeHtml(app.scope)}">` : ''}
+        ${app.nonce ? `<input type="hidden" name="nonce" value="${escapeHtml(app.nonce)}">` : ''}
 
         <div class="authorize-actions">
           <button type="submit" name="action" value="allow">允许访问</button>

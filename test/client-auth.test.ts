@@ -196,7 +196,7 @@ describe('基本准入', () => {
   test('private_key_jwt 缺 assertion 被拒', async () => {
     const r = await authenticateClient(fakeDb(), form({ client_id: CLIENT_ID }), TOKEN_ENDPOINT);
     assert.equal(r.authenticated, false);
-    assert.equal(r.error, 'invalid_request');
+    assert.equal(r.error, 'invalid_client');
   });
 
   test('assertion_type 不对被拒', async () => {

@@ -744,13 +744,36 @@ app.get("*", async (c) => {
   return c.env.ASSETS.fetch(new Request(url.toString(), c.req.raw));
 });
 
-// Scheduled handler for key rotation
+/**
+ * 定时任务：签名密钥轮换。
+ *
+ * ── 这里此前有个把整件事变成空转的 bug ──────────────────────────
+ *
+ * 原来的写法是 `if (event.cron === "0 0 * * 0")`，而 wrangler.toml 里配的是
+ * `crons = ["0 0 * * SUN"]`。Cloudflare 传给 `event.cron` 的**就是配置里
+ * 那一行原文**，两个字符串不相等 —— 于是 checkAndRotateKeys 一次都没跑过。
+ *
+ * 后果不是「少转了一次密钥」：
+ *   1. 密钥 90 天过期，而轮换从不发生
+ *   2. getCurrentSigningKey 查的是 `status = 'active'`，**不看 expires_at**，
+ *      于是继续拿那把过期的钥匙签 ID Token
+ *   3. getPublicKeys 会把过期超过 7 天宽限期的钥匙排除出 JWKS
+ *
+ * 三条合起来 = **用一把没有发布在 JWKS 里的钥匙签 token**。
+ * 线上 /.well-known/jwks.json 实测返回 `{"keys":[]}`，
+ * 而 discovery 里同时声明着 `id_token_signing_alg_values_supported`。
+ * 任何按 OIDC 规范拿 JWKS 验签的客户端都验不过。
+ *
+ * ── 为什么直接把比较删掉 ────────────────────────────────────────
+ *
+ * 只有一条 cron，这个比较不提供任何东西，只提供一种失效方式。
+ * checkAndRotateKeys 本身就是幂等的：没到 90 天它什么都不做。
+ * 将来真要加第二条 cron，再按 event.cron 分派 —— 那时候
+ * test/key-rotation.test.ts 会要求新加的字符串必须与配置对得上。
+ */
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    // Check and rotate keys weekly
-    if (event.cron === "0 0 * * 0") {
-      await checkAndRotateKeys(env.DB, env.KV, env.KEY_ENCRYPTION_SECRET);
-    }
+    await checkAndRotateKeys(env.DB, env.KV, env.KEY_ENCRYPTION_SECRET);
   }
 };

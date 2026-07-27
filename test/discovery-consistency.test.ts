@@ -41,6 +41,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { stripJsComments } from './support.ts';
 import {
   generateOIDCMetadata,
   generateAuthorizationServerMetadata,
@@ -180,8 +181,15 @@ describe('路由确实用的是这两个函数，不是又抄了一份', () => {
    *
    * 上面那段说明里逐字引用了 `scopes_supported`、`jwks_uri` 这些名字，
    * 不剥的话「路由里不再有手写字面量」这条会被自己的注释干扰。
+   *
+   * 用 `stripJsComments` 而不是一行正则：index.ts 里有 `app.use("/api/*", ...)`
+   * 这样的路由前缀，字符串里的 `/*` 会被朴素正则当成注释开头，
+   * 从那里一路吃到下一个 `*​/`，把整段路由注册都吃掉。
+   *
+   * 这条一开始就是用朴素正则写的，而且**碰巧是绿的** —— 直到我在文件末尾
+   * 加了一段块注释，配对位置一变，两条断言立刻报「找不到路由」。
    */
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const code = stripJsComments(src);
 
   for (const [path, fn] of [
     ['/.well-known/oauth-authorization-server', 'generateAuthorizationServerMetadata'],

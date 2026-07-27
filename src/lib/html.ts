@@ -16,13 +16,35 @@
 
 
 
+/**
+ * HTML 转义。同时覆盖元素上下文与属性上下文。
+ *
+ * `&` 必须最先替换，否则会把后面生成的实体再转义一次。
+ * 单引号也要转义 —— 模板里目前都用双引号包属性，但不该依赖这一点。
+ *
+ * `null` / `undefined` 转成空串，避免把字面量 "undefined" 渲染进页面。
+ */
+export function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * @param title 会被转义
+ * @param content **不转义** —— 调用方传入的是自己拼好的可信 HTML 片段
+ */
 export function renderPage(title: string, content: string): string {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} - SEKAI Pass</title>
+  <title>${escapeHtml(title)} - SEKAI Pass</title>
   <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="shortcut icon" href="/favicon.ico" />
@@ -32,6 +54,10 @@ export function renderPage(title: string, content: string): string {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/sekai/primitives.css">
+  <link rel="stylesheet" href="/css/sekai/contract.css">
+  <link rel="stylesheet" href="/css/sekai/world-system.css">
+  <link rel="stylesheet" href="/css/sekai/world-night.css">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
@@ -100,10 +126,10 @@ export function authorizePage(app: any, user: any): string {
         </div>
         <div class="scope-content">
           <div class="scope-name">
-            ${detail.label}
-            <span class="scope-tag">${scope}</span>
+            ${escapeHtml(detail.label)}
+            <span class="scope-tag">${escapeHtml(scope)}</span>
           </div>
-          <div class="scope-desc">${detail.desc}</div>
+          <div class="scope-desc">${escapeHtml(detail.desc)}</div>
         </div>
       </div>
     `;
@@ -115,7 +141,7 @@ export function authorizePage(app: any, user: any): string {
       <div class="connection-visual">
          <div class="entity user">
            <div class="entity-avatar">
-             ${userInitial}
+             ${escapeHtml(userInitial)}
            </div>
            <div class="entity-label">YOU</div>
          </div>
@@ -129,7 +155,7 @@ export function authorizePage(app: any, user: any): string {
 
          <div class="entity app">
            <div class="entity-avatar">
-             ${initial}
+             ${escapeHtml(initial)}
            </div>
            <div class="entity-label">APP</div>
          </div>
@@ -137,10 +163,10 @@ export function authorizePage(app: any, user: any): string {
 
       <h2 class="auth-title-large">授权访问请求</h2>
       <p class="auth-subtitle-large">
-        应用 <strong>${app.name}</strong> 正在请求访问您的账号
+        应用 <strong>${escapeHtml(app.name)}</strong> 正在请求访问您的账号
         <br>
         <span class="user-badge-text">
-          <span class="text-dimmed">登录身份:</span> ${user.username}
+          <span class="text-dimmed">登录身份:</span> ${escapeHtml(user.username)}
         </span>
       </p>
 
@@ -149,13 +175,13 @@ export function authorizePage(app: any, user: any): string {
       </div>
 
       <form method="POST" action="/oauth/authorize">
-        <input type="hidden" name="client_id" value="${app.client_id}">
-        <input type="hidden" name="redirect_uri" value="${app.redirect_uri}">
-        ${app.code_challenge ? `<input type="hidden" name="code_challenge" value="${app.code_challenge}">` : ''}
-        ${app.code_challenge_method ? `<input type="hidden" name="code_challenge_method" value="${app.code_challenge_method}">` : ''}
-        ${app.state ? `<input type="hidden" name="state" value="${app.state}">` : ''}
-        ${app.scope ? `<input type="hidden" name="scope" value="${app.scope}">` : ''}
-        ${app.nonce ? `<input type="hidden" name="nonce" value="${app.nonce}">` : ''}
+        <input type="hidden" name="client_id" value="${escapeHtml(app.client_id)}">
+        <input type="hidden" name="redirect_uri" value="${escapeHtml(app.redirect_uri)}">
+        ${app.code_challenge ? `<input type="hidden" name="code_challenge" value="${escapeHtml(app.code_challenge)}">` : ''}
+        ${app.code_challenge_method ? `<input type="hidden" name="code_challenge_method" value="${escapeHtml(app.code_challenge_method)}">` : ''}
+        ${app.state ? `<input type="hidden" name="state" value="${escapeHtml(app.state)}">` : ''}
+        ${app.scope ? `<input type="hidden" name="scope" value="${escapeHtml(app.scope)}">` : ''}
+        ${app.nonce ? `<input type="hidden" name="nonce" value="${escapeHtml(app.nonce)}">` : ''}
 
         <div class="authorize-actions">
           <button type="submit" name="action" value="allow">允许访问</button>
@@ -168,7 +194,7 @@ export function authorizePage(app: any, user: any): string {
 
         <div class="security-context">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-          <span>授权后将重定向至: <strong class="text-highlight">${redirectHost}</strong></span>
+          <span>授权后将重定向至: <strong class="text-highlight">${escapeHtml(redirectHost)}</strong></span>
         </div>
       </form>
     </div>

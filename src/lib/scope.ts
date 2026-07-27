@@ -20,7 +20,7 @@
 
 import type { Context, Next } from "hono";
 import type { D1Database } from "@cloudflare/workers-types";
-import { validateAccessToken } from "./tokens";
+import { validateAccessToken } from "./tokens.ts";
 
 /**
  * Supported OAuth scopes

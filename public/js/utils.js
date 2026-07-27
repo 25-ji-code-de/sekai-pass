@@ -110,6 +110,14 @@ export class APIClient {
     });
   }
 
+  async patch(endpoint, data, options = {}) {
+    return this.request(endpoint, {
+      ...options,
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
   async delete(endpoint, options = {}) {
     return this.request(endpoint, { ...options, method: 'DELETE' });
   }
@@ -150,6 +158,26 @@ export function hideMessages() {
   const successDiv = document.getElementById('success-message');
   if (errorDiv) errorDiv.style.display = 'none';
   if (successDiv) successDiv.style.display = 'none';
+}
+
+/**
+ * HTML 转义。同时覆盖元素上下文与属性上下文。
+ *
+ * 页面里到处在用模板字符串拼 innerHTML，任何来自 query string、API 响应
+ * 或用户资料的值都必须先过这里。
+ *
+ * `&` 必须最先替换，否则会把后面生成的实体再转义一次。
+ * 单引号也要转义 —— 模板里目前都用双引号包属性，但不该依赖这一点。
+ * `null` / `undefined` 转成空串，避免把字面量 "undefined" 渲染进页面。
+ */
+export function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // Get query parameters

@@ -17,18 +17,21 @@
 import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
-import { initializeLucia } from "./lib/auth";
-import { generateId } from "./lib/password";
-import { verifyPKCE, validateCodeChallenge, validateCodeVerifier } from "./lib/pkce";
-import { issueTokens, validateAccessToken, refreshAccessToken, revokeRefreshToken, revokeAllUserTokens } from "./lib/tokens";
-import { validateScopeParameter, formatScopes, filterUserData, SCOPES, hasScopes } from "./lib/scope";
-import { isOIDCRequest } from "./lib/oidc-scope";
-import { generateIDToken } from "./lib/id-token";
-import { generateOIDCMetadata } from "./lib/oidc-discovery";
-import { getPublicKeys, checkAndRotateKeys } from "./lib/keys";
-import { authenticateClient } from "./lib/client-auth";
-import * as html from "./lib/html";
-import { apiRouter } from "./lib/api";
+import { initializeLucia } from "./lib/auth.ts";
+import { generateId } from "./lib/password.ts";
+import { verifyPKCE, validateCodeChallenge, validateCodeVerifier } from "./lib/pkce.ts";
+import { issueTokens, validateAccessToken, refreshAccessToken, revokeRefreshToken, revokeAllUserTokens } from "./lib/tokens.ts";
+import { validateScopeParameter, formatScopes, filterUserData, SCOPES, hasScopes } from "./lib/scope.ts";
+import { isOIDCRequest } from "./lib/oidc-scope.ts";
+import { generateIDToken, EMAIL_VERIFIED } from "./lib/id-token.ts";
+import {
+  generateOIDCMetadata,
+  generateAuthorizationServerMetadata
+} from "./lib/oidc-discovery.ts";
+import { getPublicKeys, checkAndRotateKeys } from "./lib/keys.ts";
+import { authenticateClient } from "./lib/client-auth.ts";
+import * as html from "./lib/html.ts";
+import { apiRouter } from "./lib/api.ts";
 
 type Bindings = {
   DB: D1Database;
@@ -102,6 +105,57 @@ function parseRedirectUris(redirectUris: string): string[] {
   }
 }
 
+/**
+ * 安全响应头。
+ *
+ * 本仓是 Worker 不是 Pages，没有 _headers 文件 —— 在这次加上之前，
+ * **整个 SSO 一个安全头都没有**。授权同意页因此可以被 iframe 嵌套，
+ * 攻击者可以透明覆盖诱导用户点「允许访问」（点击劫持）。
+ *
+ * 分两条推进，与四个静态站的做法一致：
+ *   Content-Security-Policy            —— 只放零破坏风险的指令，强制生效
+ *   Content-Security-Policy-Report-Only —— 完整策略，先收集违规数据
+ *
+ * index.html（SPA 入口）没有任何内联 script/style，所以完整策略里
+ * script-src 不需要 'unsafe-inline'；docs.html 有内联，Report-Only
+ * 阶段会把它报出来，届时再决定是外置还是给 docs 单独放宽。
+ */
+const CSP_ENFORCED = [
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+const CSP_REPORT_ONLY = [
+  "default-src 'self'",
+  // Turnstile 的脚本与它注入的挑战 iframe
+  "script-src 'self' https://challenges.cloudflare.com",
+  "frame-src https://challenges.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  // 头像来自对象存储
+  "img-src 'self' data: https://assets.nightcord.de5.net https://storage.nightcord.de5.net https://r2.nightcord.de5.net",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+app.use("*", async (c, next) => {
+  await next();
+
+  // 点击劫持防护 —— 对同意页尤其关键，它一个误点就等于批准了授权
+  c.header("X-Frame-Options", "DENY");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+  // 不带 includeSubDomains：只约束本主机，避免影响其它 *.nightcord.de5.net
+  c.header("Strict-Transport-Security", "max-age=31536000");
+  c.header("Content-Security-Policy", CSP_ENFORCED);
+  c.header("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY);
+});
+
 // CORS middleware for API and OAuth endpoints
 app.use("/api/*", cors({
   origin: "*",
@@ -169,26 +223,7 @@ app.use("/oauth/*", async (c, next) => {
 // OAuth Discovery Endpoint (RFC 8414)
 app.get("/.well-known/oauth-authorization-server", async (c) => {
   const baseUrl = new URL(c.req.url).origin;
-
-  return c.json({
-    issuer: baseUrl,
-    authorization_endpoint: `${baseUrl}/oauth/authorize`,
-    token_endpoint: `${baseUrl}/oauth/token`,
-    userinfo_endpoint: `${baseUrl}/oauth/userinfo`,
-    revocation_endpoint: `${baseUrl}/oauth/revoke`,
-    response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
-    code_challenge_methods_supported: ["S256"],
-    token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
-    token_endpoint_auth_signing_alg_values_supported: ["ES256", "RS256"],
-    revocation_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: Object.values(SCOPES),
-    service_documentation: `${baseUrl}/docs`,
-    ui_locales_supported: ["zh-CN", "en-US"],
-    // OAuth 2.1: PKCE is mandatory
-    require_pushed_authorization_requests: false,
-    require_request_uri_registration: false
-  });
+  return c.json(generateAuthorizationServerMetadata(baseUrl));
 });
 
 // OpenID Connect Discovery Endpoint
@@ -632,7 +667,9 @@ app.get("/oauth/userinfo", async (c) => {
 
   if (hasScopes(tokenInfo.scope, [SCOPES.EMAIL])) {
     userInfo.email = user.email;
-    userInfo.email_verified = true;  // Assuming verified
+    // 与 ID Token 用同一个常量 —— 两处发不一样的值会让接入方无所适从，
+    // 而且这种不一致没有任何东西会报错。理由见 EMAIL_VERIFIED 的注释。
+    userInfo.email_verified = EMAIL_VERIFIED;
   }
 
   // OAuth 2.1: Responses with sensitive data must include Cache-Control: no-store
@@ -707,13 +744,36 @@ app.get("*", async (c) => {
   return c.env.ASSETS.fetch(new Request(url.toString(), c.req.raw));
 });
 
-// Scheduled handler for key rotation
+/**
+ * 定时任务：签名密钥轮换。
+ *
+ * ── 这里此前有个把整件事变成空转的 bug ──────────────────────────
+ *
+ * 原来的写法是 `if (event.cron === "0 0 * * 0")`，而 wrangler.toml 里配的是
+ * `crons = ["0 0 * * SUN"]`。Cloudflare 传给 `event.cron` 的**就是配置里
+ * 那一行原文**，两个字符串不相等 —— 于是 checkAndRotateKeys 一次都没跑过。
+ *
+ * 后果不是「少转了一次密钥」：
+ *   1. 密钥 90 天过期，而轮换从不发生
+ *   2. getCurrentSigningKey 查的是 `status = 'active'`，**不看 expires_at**，
+ *      于是继续拿那把过期的钥匙签 ID Token
+ *   3. getPublicKeys 会把过期超过 7 天宽限期的钥匙排除出 JWKS
+ *
+ * 三条合起来 = **用一把没有发布在 JWKS 里的钥匙签 token**。
+ * 线上 /.well-known/jwks.json 实测返回 `{"keys":[]}`，
+ * 而 discovery 里同时声明着 `id_token_signing_alg_values_supported`。
+ * 任何按 OIDC 规范拿 JWKS 验签的客户端都验不过。
+ *
+ * ── 为什么直接把比较删掉 ────────────────────────────────────────
+ *
+ * 只有一条 cron，这个比较不提供任何东西，只提供一种失效方式。
+ * checkAndRotateKeys 本身就是幂等的：没到 90 天它什么都不做。
+ * 将来真要加第二条 cron，再按 event.cron 分派 —— 那时候
+ * test/key-rotation.test.ts 会要求新加的字符串必须与配置对得上。
+ */
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    // Check and rotate keys weekly
-    if (event.cron === "0 0 * * 0") {
-      await checkAndRotateKeys(env.DB, env.KV, env.KEY_ENCRYPTION_SECRET);
-    }
+    await checkAndRotateKeys(env.DB, env.KV, env.KEY_ENCRYPTION_SECRET);
   }
 };

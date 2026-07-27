@@ -19,7 +19,7 @@
 // Handles ES256 key generation, storage, rotation, and retrieval
 
 import type { D1Database, KVNamespace } from "@cloudflare/workers-types";
-import { generateId } from "./password";
+import { generateId } from "./password.ts";
 
 export interface SigningKey {
   kid: string;

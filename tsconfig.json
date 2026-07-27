@@ -5,7 +5,12 @@
     "lib": ["ES2022"],
     "types": ["@cloudflare/workers-types"],
     "jsx": "react",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
+    // 与 wrangler/esbuild 实际的解析行为一致
+    "noEmit": true,
+    // 源码里的相对 import 都带 .ts 扩展名 —— Node 的 ESM 解析器要求显式扩展名，
+    // 否则 test/ 里无法直接 import src/（见 issue #9）
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,

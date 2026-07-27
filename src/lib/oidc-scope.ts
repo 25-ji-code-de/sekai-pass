@@ -18,7 +18,7 @@
 // OIDC Scope Handling
 // Maps OIDC scopes to claims and validates OIDC requests
 
-import { SCOPES, parseScopes, type Scope } from "./scope";
+import { SCOPES, parseScopes, type Scope } from "./scope.ts";
 
 /**
  * Check if request includes openid scope

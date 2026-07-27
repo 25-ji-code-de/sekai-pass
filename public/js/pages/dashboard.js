@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { showError, setLoading } from '../utils.js';
+import { showError, setLoading, escapeHtml } from '../utils.js';
 
 export async function renderDashboard(app, api, navigate) {
   const token = localStorage.getItem('token');
@@ -20,7 +20,8 @@ export async function renderDashboard(app, api, navigate) {
         <p><strong>加载中...</strong></p>
       </div>
       <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-        <button id="settings-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: auto; min-width: 120px;">账号设置</button>
+        <button id="apps-btn" class="btn-auto">开放平台</button>
+          <button id="settings-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: auto; min-width: 120px;">账号设置</button>
         <button id="logout-btn" class="btn-secondary btn-auto">退出登录</button>
       </div>
       <div style="clear: both;"></div>
@@ -37,12 +38,7 @@ export async function renderDashboard(app, api, navigate) {
     });
 
     const userInfoDiv = document.getElementById('user-info');
-    const escapeHtml = (s) => String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-
+    // 原本这里有一份本地 escapeHtml，且漏了单引号。改用 utils.js 的共享实现。
     userInfoDiv.innerHTML = `
       <p><strong>用户名</strong> <span>${escapeHtml(user.username)}</span></p>
       <p><strong>邮箱</strong> <span>${escapeHtml(user.email)}</span></p>
@@ -58,6 +54,8 @@ export async function renderDashboard(app, api, navigate) {
   }
 
   // Handle settings
+  document.getElementById('apps-btn').addEventListener('click', () => navigate('/apps'));
+
   const settingsBtn = document.getElementById('settings-btn');
   settingsBtn.addEventListener('click', () => {
     navigate('/settings');

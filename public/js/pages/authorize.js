@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { showError, getQueryParams, setLoading } from '../utils.js';
+import { showError, getQueryParams, setLoading, escapeHtml } from '../utils.js';
 
 export async function renderAuthorize(app, api, navigate) {
   const token = localStorage.getItem('token');
@@ -37,7 +37,8 @@ export async function renderAuthorize(app, api, navigate) {
 
   try {
     // Get application info
-    const appInfo = await api.get(`/oauth/app-info?client_id=${client_id}`, {
+    // client_id 来自 query string，必须编码 —— 否则里面的 & 会注入额外的查询参数
+    const appInfo = await api.get(`/oauth/app-info?client_id=${encodeURIComponent(client_id)}`, {
       headers: api.getAuthHeaders()
     });
 
@@ -92,10 +93,10 @@ export async function renderAuthorize(app, api, navigate) {
           </div>
           <div class="scope-content">
             <div class="scope-name">
-              ${detail.label}
-              <span class="scope-tag">${scope}</span>
+              ${escapeHtml(detail.label)}
+              <span class="scope-tag">${escapeHtml(scope)}</span>
             </div>
-            <div class="scope-desc">${detail.desc}</div>
+            <div class="scope-desc">${escapeHtml(detail.desc)}</div>
           </div>
         </div>
       `;
@@ -113,7 +114,7 @@ export async function renderAuthorize(app, api, navigate) {
         <div class="connection-visual">
            <div class="entity user">
              <div class="entity-avatar" style="background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%);">
-               ${userInitial}
+               ${escapeHtml(userInitial)}
              </div>
              <div class="entity-label">YOU</div>
            </div>
@@ -126,7 +127,7 @@ export async function renderAuthorize(app, api, navigate) {
 
            <div class="entity app">
              <div class="entity-avatar">
-               ${initial}
+               ${escapeHtml(initial)}
              </div>
              <div class="entity-label">APP</div>
            </div>
@@ -134,10 +135,10 @@ export async function renderAuthorize(app, api, navigate) {
 
         <h2 class="auth-title-large">授权访问请求</h2>
         <p class="auth-subtitle-large">
-          应用 <strong>${appInfo.name}</strong> 正在请求访问您的账号
+          应用 <strong>${escapeHtml(appInfo.name)}</strong> 正在请求访问您的账号
           <br>
           <span class="user-badge-text" style="font-size: 11px; margin-top: 6px; display: inline-block; padding: 2px 8px; background: rgba(255,255,255,0.05); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
-            <span style="opacity: 0.6;">登录身份:</span> <strong style="color: var(--text-main);">${user.username}</strong>
+            <span style="opacity: 0.6;">登录身份:</span> <strong style="color: var(--text-main);">${escapeHtml(user.username)}</strong>
           </span>
         </p>
 
@@ -156,7 +157,7 @@ export async function renderAuthorize(app, api, navigate) {
         
         <div class="security-context">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-          <span>授权后将重定向至: <strong style="color: var(--text-main);">${redirectHost}</strong></span>
+          <span>授权后将重定向至: <strong style="color: var(--text-main);">${escapeHtml(redirectHost)}</strong></span>
         </div>
       </div>
     `;

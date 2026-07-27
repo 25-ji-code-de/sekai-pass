@@ -18,7 +18,7 @@
 // Client Authentication Module (RFC 7523)
 // Implements Private Key JWT client authentication for OAuth 2.1
 
-import { decodeJWT, base64URLDecode } from "./jwt";
+import { decodeJWT, base64URLDecode } from "./jwt.ts";
 
 export interface AuthenticationResult {
   authenticated: boolean;
@@ -233,8 +233,16 @@ async function authenticateClientWithJWT(
     };
   }
 
-  // Store JTI to prevent replay
-  await storeJTI(db, payload.jti, clientId, payload.exp);
+  // 占用 JTI。这一步才是防重放的**权威判定** —— 上面的 checkJWTReplay
+  // 只是省掉一次验签的快速通道，它自己拦不住并发（见 storeJTI 的注释）。
+  const claimed = await storeJTI(db, payload.jti, clientId, payload.exp);
+  if (!claimed) {
+    return {
+      authenticated: false,
+      error: "invalid_client",
+      errorDescription: "JWT has already been used (replay detected)"
+    };
+  }
 
   // Authentication successful
   return {
@@ -391,24 +399,41 @@ async function checkJWTReplay(
 }
 
 /**
- * Store JTI to prevent replay attacks
+ * 原子地占用一个 JTI。
+ *
+ * @returns 占用成功返回 true；这个 jti 已经被用过返回 false
+ *
+ * 为什么不能只靠上面的 checkJWTReplay：那是「先 SELECT 再 INSERT」，
+ * 两个并发请求带同一个 assertion 时，两边的 SELECT 都会 miss，
+ * 于是**两边都通过认证** —— 重放正好成立。窗口很窄，但重放攻击本来
+ * 就是抢时间的。
+ *
+ * 这里用 `INSERT OR IGNORE` + `meta.changes`：主键是 (jti, client_id)，
+ * 冲突时 SQLite 静默跳过、changes 为 0，判定权就落在数据库的原子性上，
+ * 并发下也只有一个请求能占到。
+ *
+ * 之前这里还把异常吞掉了（"Don't fail authentication if storage fails"）——
+ * 那等于说「防重放写不进去就不防了」，方向反了：写不进去应当拒绝认证。
  */
 async function storeJTI(
   db: D1Database,
   jti: string,
   clientId: string,
   exp: number
-): Promise<void> {
+): Promise<boolean> {
   try {
     const now = Date.now();
     const expiresAt = exp * 1000; // Convert to milliseconds
 
-    await db.prepare(
-      "INSERT INTO jwt_replay_cache (jti, client_id, expires_at, created_at) VALUES (?, ?, ?, ?)"
+    const result = await db.prepare(
+      "INSERT OR IGNORE INTO jwt_replay_cache (jti, client_id, expires_at, created_at) VALUES (?, ?, ?, ?)"
     ).bind(jti, clientId, expiresAt, now).run();
+
+    return Boolean(result.meta?.changes);
   } catch (error) {
     console.error("Error storing JTI:", error);
-    // Don't fail authentication if storage fails, but log the error
+    // 写不进去就不能放行 —— 否则防重放形同虚设
+    return false;
   }
 }
 

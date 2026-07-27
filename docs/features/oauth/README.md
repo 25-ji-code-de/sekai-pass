@@ -95,18 +95,25 @@ OAuth 2.1 包含以下安全特性：
 
 ## 客户端配置
 
-注册 OAuth 客户端时需要提供：
+在开放平台页面 `/apps` 自助注册，需要提供：
 
 ```json
 {
-  "client_id": "your-client-id",
-  "client_secret": "your-client-secret",
+  "name": "你的应用名",
   "redirect_uris": ["https://your-app.com/callback"],
-  "grant_types": ["authorization_code", "refresh_token"],
-  "response_types": ["code"],
-  "scope": "openid profile email"
+  "token_endpoint_auth_method": "none"
 }
 ```
+
+服务端生成 `client_id` 并返回。
+
+> [!IMPORTANT]
+> **没有 `client_secret`。** `token_endpoint_auth_methods_supported`
+> 只有 `none` 与 `private_key_jwt`，两种都不用密钥字符串：
+>
+> - `none` —— 公开客户端（SPA / 移动端），靠 PKCE
+> - `private_key_jwt` —— 机密客户端，注册公钥后用私钥签 JWT 断言
+>   （见 [private-key-jwt](private-key-jwt.md)）
 
 ## 安全建议
 

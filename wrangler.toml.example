@@ -1,3 +1,13 @@
+# wrangler.toml — 由 Workers Builds 构建时自动渲染（${VAR} 从 Dashboard 环境变量注入）
+# 本地开发：复制此文件为 wrangler.toml，手动填入真实值
+#
+# 需要在 Cloudflare Dashboard 配置以下环境变量：
+#   TURNSTILE_SITE_KEY   — Turnstile site key
+#   D1_DATABASE_ID       — sekai_pass_db 的 database ID
+#   KV_NAMESPACE_ID      — OIDC_KEYS KV namespace ID
+#   KV_PREVIEW_ID        — OIDC_KEYS preview KV namespace ID
+# 真正的 secret（TURNSTILE_SECRET_KEY 等）通过 `wrangler secret` 管理，不在此文件中
+
 name = "sekai-pass"
 main = "src/index.ts"
 compatibility_date = "2026-02-10"
@@ -5,7 +15,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 ENVIRONMENT = "production"
-TURNSTILE_SITE_KEY = "1x00000000000000000000AA"  # 替换为实际值
+TURNSTILE_SITE_KEY = "${TURNSTILE_SITE_KEY}"
 
 # Static assets configuration
 [assets]
@@ -13,24 +23,17 @@ directory = "public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-# 配置说明：
-# 1. 复制此文件为 wrangler.toml
-# 2. 运行 `npx wrangler d1 create sekai_pass_db` 创建数据库
-# 3. 将输出的 database_id 填入下方
-# 4. 运行 `npx wrangler d1 execute sekai_pass_db --remote --file=./schema.sql` 应用架构
-
 [[d1_databases]]
 binding = "DB"
 database_name = "sekai_pass_db"
-database_id = "your-database-id-here"  # 替换为你的 database_id
+database_id = "${D1_DATABASE_ID}"
 
 # KV namespace for signing key cache
 [[kv_namespaces]]
 binding = "KV"
-id = "YOUR_KV_NAMESPACE_ID"  # Run: wrangler kv:namespace create "OIDC_KEYS"
-preview_id = "YOUR_PREVIEW_KV_NAMESPACE_ID"  # Run: wrangler kv:namespace create "OIDC_KEYS" --preview
+id = "${KV_NAMESPACE_ID}"
+preview_id = "${KV_PREVIEW_ID}"
 
 # Cron trigger for key rotation (weekly on Sunday at midnight)
 [triggers]
 crons = ["0 0 * * SUN"]
-

@@ -337,10 +337,36 @@
       return { verifier, challenge };
     }
 
+    /**
+     * HTML 转义。凡是要拼进 innerHTML 的值都得过这里。
+     *
+     * ID Token 的 claim **不是可信数据**：`name` / `preferred_username` /
+     * `email` 归根到底是别的用户自己填的字段。SEKAI Pass 上昵称只校验长度
+     * （≤ 50 字符），`<img src=x onerror=alert(1)>` 才 33 个字符。
+     */
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     // 显示状态消息
     function showStatus(message, type = 'info') {
       const statusDiv = document.getElementById('status');
-      statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+      /*
+       * message 不全是本地字面量：授权失败那一路传的是回调 URL 上的
+       * `error` 查询参数，token 交换失败那一路传的是服务端返回的文本。
+       * 两者都不该原样进 innerHTML。
+       *
+       * type 也转义 —— 它现在只有三个调用方传字面量，但它进的是 class
+       * 属性，将来有人传变量进来时这里不该是缺口。
+       */
+      statusDiv.innerHTML =
+        `<div class="status ${escapeHtml(type)}">${escapeHtml(message)}</div>`;
     }
 
     // 开始 OIDC 登录流程
@@ -486,10 +512,16 @@
             } else if (typeof value === 'object') {
               displayValue = JSON.stringify(value);
             }
+            /*
+             * key 与 value 都来自解出来的 ID Token —— 全部转义。
+             *
+             * key 也要转义：JWT 的 claim 名没有任何格式约束，是签发方决定的，
+             * 换个 issuer 就可能出现带尖括号的 claim 名。
+             */
             return `
               <div class="claim-item">
-                <span class="claim-key">${key}</span>
-                <span class="claim-value">${displayValue}</span>
+                <span class="claim-key">${escapeHtml(key)}</span>
+                <span class="claim-value">${escapeHtml(displayValue)}</span>
               </div>
             `;
           }).join('');

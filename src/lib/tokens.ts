@@ -162,7 +162,15 @@ export async function revokeAccessToken(
     "DELETE FROM access_tokens WHERE token = ?"
   ).bind(token).run();
 
-  return result.success;
+  /*
+   * 看 `meta.changes`，不看 `success` —— 与 revokeRefreshToken 同一个理由：
+   * D1 的 success 表示语句执行成功，删 0 行也是 true。
+   *
+   * 这个函数此前**没有任何生产调用方**（只有一条测试），所以这个 bug
+   * 一直是潜伏的。现在 lib/revoke.ts 用它了 —— 那里原本自己又写了一遍
+   * 同样的 DELETE，而「同一个概念两份实现」正是本仓这一串 bug 的来源。
+   */
+  return ((result as any).meta?.changes ?? 0) > 0;
 }
 
 /**

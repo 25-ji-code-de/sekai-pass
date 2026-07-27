@@ -17,7 +17,7 @@
 // RFC 7009 令牌撤销
 
 import type { D1Database } from "@cloudflare/workers-types";
-import { revokeRefreshToken } from "./tokens.ts";
+import { revokeRefreshToken, revokeAccessToken } from "./tokens.ts";
 
 /**
  * 撤销一个 token，两种类型都试。
@@ -48,20 +48,17 @@ export async function revokeToken(
   token: string,
   tokenTypeHint?: string | null
 ): Promise<boolean> {
+  /*
+   * 两个都用 tokens.ts 里现成的函数，不在这里再写一遍 DELETE。
+   *
+   * 第一版在这里内联了 `DELETE FROM access_tokens WHERE token = ?` ——
+   * 而 tokens.ts 里的 revokeAccessToken 干的是同一件事，只是**没有任何
+   * 生产调用方**，于是同一个 `success` 判定 bug 在那里又躺了一份。
+   *
+   * 「同一个概念两份实现」正是本仓这一串 bug 的共同来源。
+   */
   const tryRefresh = () => revokeRefreshToken(db, token, true);
-
-  const tryAccess = async (): Promise<boolean> => {
-    const result = await db.prepare(
-      "DELETE FROM access_tokens WHERE token = ?"
-    ).bind(token).run();
-    /*
-     * 看 changes，不看 success。
-     *
-     * D1 的 `success` 表示**语句执行成功**，删了 0 行也是 true ——
-     * 原来的代码用它当判据，于是「撤销成功」这个返回值恒为真。
-     */
-    return ((result as any).meta?.changes ?? 0) > 0;
-  };
+  const tryAccess = () => revokeAccessToken(db, token);
 
   // hint 只影响顺序：先试它说的那种，失败了再试另一种
   const order = tokenTypeHint === "access_token"

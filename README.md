@@ -117,29 +117,32 @@ npm run deploy
 
 ### OAuth 客户端注册
 
-要将应用集成到 SSO，首先需要注册客户端。
+登录后在仪表板点「开放平台」（或直接访问 `/apps`）即可自助创建、修改、删除自己的应用，不需要碰数据库。
 
-**注意**: 应用管理 UI 正在开发中，需要通过数据库直接注册。
+也可以走 API：
 
 ```bash
-# 本地开发环境
-npx wrangler d1 execute sekai_pass_db --local --command "
-INSERT INTO applications (id, name, client_id, client_secret, redirect_uris, created_at)
-VALUES (
-  'app-' || hex(randomblob(8)),
-  'My Application',
-  'client-' || hex(randomblob(12)),
-  'secret-' || hex(randomblob(16)),
-  '[\"http://localhost:3000/callback\",\"http://localhost:8080/callback\"]',
-  $(date +%s)000
-)
-RETURNING client_id, client_secret;"
-
-# 生产环境（使用 --remote 替换 --local）
-npx wrangler d1 execute sekai_pass_db --remote --command "..."
+curl -X POST https://id.nightcord.de5.net/api/apps \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_SESSION" \
+  -d '{
+    "name": "My Application",
+    "redirect_uris": ["http://localhost:3000/callback"],
+    "token_endpoint_auth_method": "none"
+  }'
 ```
 
-**重要**: 保存输出的 `client_id` 和 `client_secret`。
+响应里的 `client_id` 就是你要的东西。**不会返回 `client_secret`** —— 本服务只支持两种客户端认证方式：
+
+| 方式 | 适用 | 凭据 |
+| --- | --- | --- |
+| `none` | SPA、移动端、以及任何跑在用户设备上的东西 | 只有 `client_id`，靠 PKCE 保证安全 |
+| `private_key_jwt` | 有服务端、需要证明自己身份的应用 | 你自己生成密钥对，把**公钥**登记到 `/apps/:clientId/keys` |
+
+`private_key_jwt` 的私钥自始至终不离开你的机器；`/oauth/token` 也从不接受 `client_secret`。
+
+> **老应用**：平台上线前手工插进库里的应用没有 `owner_user_id`，因此在开放平台里看不见（这是按 owner 隔离的结果，不是故障）。认领办法见
+> [`migrations/0001_open_platform.sql`](./migrations/0001_open_platform.sql)，或者直接跑 `npm run migrate`，它会把这样的应用列出来并给出认领用的 SQL。
 
 ### OAuth 2.1 流程
 
@@ -208,9 +211,14 @@ curl https://id.nightcord.de5.net/oauth/userinfo \
   "picture": "https://storage.nightcord.de5.net/avatars/xxx.webp",
   "bio": "Hello, SEKAI",
   "email": "user@example.com",
-  "email_verified": true
+  "email_verified": false
 }
 ```
+
+> **`email_verified` 恒为 `false`** —— 本服务没有邮箱验证流程（注册只要求邮箱唯一，不发确认信）。
+> **不要用这里的 `email` 做账号关联**：信了未验证的邮箱，攻击者用受害者的邮箱在这里注册就能接管
+> 受害者在你那边的账号。要按邮箱关联请自己发确认信。详见
+> [OIDC 实现文档](./docs/features/oidc/implementation.md#email_verified-恒为-false)。
 
 #### 4. 刷新访问令牌
 
@@ -274,7 +282,7 @@ ID Token 是一个 JWT，包含用户信息：
   "name": "Display Name",
   "preferred_username": "username",
   "email": "user@example.com",
-  "email_verified": true
+  "email_verified": false
 }
 ```
 

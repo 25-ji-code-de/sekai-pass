@@ -4,44 +4,32 @@
  */
 
 /**
- * 签名密钥轮换：定时任务必须真的会触发，过期的钥匙必须真的会被换掉。
+ * 签名密钥的中心不变量：**任何被拿来签 ID Token 的钥匙，签的那一刻必须已经
+ * 发布在 JWKS 里。** 一旦签名侧和发布侧对「哪些钥匙算数」的判断分了叉，就会
+ * 出现「签得出、验不了」——客户端按 OIDC 规范取 JWKS 验签，怎么都验不过。
  *
  * ── 由来 ────────────────────────────────────────────────────────
  *
- * `scheduled` 里写的是：
+ * 定时任务此前因为 cron 字符串对不上（`"0 0 * * 0"` vs 配置的 `"0 0 * * SUN"`）
+ * 一次都没跑过；那一层已修。但**根因**留了下来：
  *
- *     if (event.cron === "0 0 * * 0") { await checkAndRotateKeys(...) }
+ *   1. `getCurrentSigningKey` 只筛 `status = 'active'`，**不看 expires_at**
+ *      —— 轮换一停，它就继续拿过期钥匙签名
+ *   2. `getPublicKeys` 把过期超过 7 天宽限期的钥匙剔出 JWKS
+ *   3. `rotateSigningKeys` 按 `created_at` 立即吊销旧钥匙 —— 说好的 7 天宽限
+ *      实际是 0 天
  *
- * 而 `wrangler.toml` 里配的是 `crons = ["0 0 * * SUN"]`。
- * Cloudflare 传给 `event.cron` 的**就是配置里那一行原文** —— 两个字符串
- * 不相等，于是 `checkAndRotateKeys` 一次都没跑过。
- * 它在整个仓里只有这一个调用点。
- *
- * ── 为什么这不只是「少转了一次密钥」 ────────────────────────────
- *
- *   1. 密钥 90 天过期（`expiresAt = createdAt + 90d`），而轮换从不发生
- *   2. `getCurrentSigningKey` 查的是 `status = 'active'`，**不看 expires_at**
- *      —— 于是继续拿那把过期的钥匙签 ID Token
- *   3. `getPublicKeys` 会把过期超过 7 天宽限期的钥匙排除出 JWKS
- *
- * 合起来就是：**用一把没有发布在 JWKS 里的钥匙签 token。**
- *
- * 线上实测（2026-07-27）：
- *
- *     $ curl -s https://id.nightcord.de5.net/.well-known/jwks.json
- *     {"keys":[]}
- *
- * 同时 discovery 里声明着 `id_token_signing_alg_values_supported:
- * ["ES256","RS256"]`。按 OIDC 规范取 JWKS 验签的客户端，一个都验不过。
+ * 合起来：线上 `/.well-known/jwks.json` 实测返回 `{"keys":[]}`。
  *
  * ── 这批测试盯什么 ──────────────────────────────────────────────
  *
- * 不是「`scheduled` 里不许出现某个字符串」，而是两件会再次犯的事：
- *   A. 代码里比对的 cron 字符串，必须与配置文件里真实存在的对得上
- *   B. 过期的钥匙进不了 JWKS —— 这条钉住的是「为什么第 1 条会致命」
+ *   A. 定时任务真的会触发（cron 字符串必须与配置里的对得上）
+ *   B. 签名只用未过期的钥匙；没有就即时补一把 —— 签出来的 kid 必在 JWKS 里
+ *   C. JWKS 端点不会返回空集（哪怕冷库/调度停摆）
+ *   D. 轮换的判断直接读 D1，不被签名侧的懒补钥匙掩盖；宽限期从轮换那一刻算起
  *
- * B 组用**真的 SQLite** 跑，不用录 SQL 的假 db。
- * 这个 bug 就长在 WHERE 的语义里，假 db 看不见 WHERE。
+ * B/C/D 组用**真的 SQLite** 跑，不用录 SQL 的假 db —— 这些 bug 长在 WHERE
+ * 和时间比较的语义里，假 db 看不见。
  */
 
 import { test, describe } from 'node:test';
@@ -54,6 +42,7 @@ import { stripJsComments } from './support.ts';
 
 import {
   getPublicKeys,
+  getOrCreatePublicKeys,
   checkAndRotateKeys,
   getCurrentSigningKey,
   generateSigningKey,
@@ -175,10 +164,20 @@ function realDb() {
   } as any;
 }
 
-/** KV 的最小实现。 */
+/**
+ * KV 的最小实现。
+ *
+ * 不模拟 expirationTtl —— 真实 KV 到点会自己删，而这里的过期语义全靠钥匙
+ * JSON 里的 expiresAt 字段表达（代码就是这么判的）。`raw` / `seed` 暴露出来，
+ * 好让测试直接摆出「KV 缓存指向一把已过期钥匙」这种状态。
+ */
 function memKv() {
   const m = new Map<string, string>();
   return {
+    raw: m,
+    seed(k: string, v: string) {
+      m.set(k, v);
+    },
     async get(k: string) {
       return m.get(k) ?? null;
     },
@@ -190,6 +189,19 @@ function memKv() {
     },
     size: () => m.size,
   } as any;
+}
+
+/** 直接在 KV 里摆一把「当前钥匙」缓存，expiresAt 由调用方指定。 */
+function seedKvCurrent(kv: any, kid: string, expiresAt: number) {
+  kv.seed(`signing_key:${kid}`, JSON.stringify({
+    kid,
+    publicKey: { kid, kty: 'EC' },
+    privateKey: { kid, kty: 'EC', d: 'x' },
+    algorithm: 'ES256',
+    createdAt: expiresAt - 90 * DAY,
+    expiresAt,
+  }));
+  kv.seed('current_signing_key', kid);
 }
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -221,13 +233,12 @@ async function seedKey(
   return key.kid;
 }
 
-describe('JWKS 里有什么，签名用的是什么', () => {
+describe('JWKS 发布哪些钥匙（getPublicKeys）', () => {
   test('没过期的钥匙在 JWKS 里', async () => {
     const db = realDb();
     const kv = memKv();
     const kid = await seedKey(db, kv, 10 * DAY, 80 * DAY);
-    const keys = await getPublicKeys(db);
-    assert.deepEqual(keys.map((k: any) => k.kid), [kid]);
+    assert.deepEqual((await getPublicKeys(db)).map((k: any) => k.kid), [kid]);
   });
 
   test('刚过期、还在 7 天宽限期内的钥匙**仍然**在 JWKS 里', async () => {
@@ -235,95 +246,197 @@ describe('JWKS 里有什么，签名用的是什么', () => {
     const db = realDb();
     const kv = memKv();
     const kid = await seedKey(db, kv, 92 * DAY, -2 * DAY);
-    const keys = await getPublicKeys(db);
-    assert.deepEqual(keys.map((k: any) => k.kid), [kid]);
+    assert.deepEqual((await getPublicKeys(db)).map((k: any) => k.kid), [kid]);
   });
 
-  test('过期超过宽限期的钥匙从 JWKS 里消失 —— 线上空 JWKS 就是这么来的', async () => {
+  test('过期超过宽限期的钥匙从 JWKS 里消失', async () => {
     const db = realDb();
     const kv = memKv();
-    const kid = await seedKey(db, kv, 200 * DAY, -110 * DAY);
-    const keys = await getPublicKeys(db);
-    assert.deepEqual(
-      keys,
-      [],
-      '这条**期望**它消失。JWKS 变空本身是对的 —— 错的是轮换没跑，' +
-        '让一把过期这么久的钥匙成了唯一的钥匙',
-    );
+    await seedKey(db, kv, 200 * DAY, -110 * DAY);
+    assert.deepEqual(await getPublicKeys(db), [], '过了宽限期就不该再发布');
   });
 
   test('revoked 的钥匙不在 JWKS 里', async () => {
     const db = realDb();
     const kv = memKv();
-    const kid = await seedKey(db, kv, 10 * DAY, 80 * DAY, 'revoked');
-    assert.deepEqual(await getPublicKeys(db), []);
-  });
-
-  test('过期的钥匙照样会被当成签名钥匙取出来（危险的那一半）', async () => {
-    /*
-     * getCurrentSigningKey 只筛 status = 'active'，**不看 expires_at**。
-     *
-     * 这条测试记录的是现状，不是在赞同它：轮换正常跑的时候这不会发生，
-     * 因为不会存在「过期很久还是 active」的钥匙。但一旦轮换停了，
-     * 它就会安静地拿一把 JWKS 里没有的钥匙继续签 —— 也就是线上发生的事。
-     *
-     * 若将来给它加上过期检查，这条会红。**那时候应当改这条测试，
-     * 而不是把过期检查去掉。**
-     */
-    const db = realDb();
-    const kv = memKv();
-    const kid = await seedKey(db, kv, 200 * DAY, -110 * DAY);
-    // 特意传一个空的 KV：强制走 D1 那条路径，也就是只筛 status 的那条
-    const current = await getCurrentSigningKey(db, memKv(), SECRET);
-    assert.ok(current, '过期的 active 钥匙仍会被取出来');
-    assert.equal(current!.kid, kid);
-
-    // 而它同时不在 JWKS 里 —— 两句合起来就是「签得出、验不了」
+    await seedKey(db, kv, 10 * DAY, 80 * DAY, 'revoked');
     assert.deepEqual(await getPublicKeys(db), []);
   });
 });
 
-describe('checkAndRotateKeys 的判断', () => {
-  test('一把钥匙都没有时会生成初始钥匙', async () => {
+describe('签名只用未过期的钥匙，且签出来的 kid 必在 JWKS 里（中心不变量）', () => {
+  test('过期的 active 钥匙不再被拿来签名，而是即时轮换出一把新的', async () => {
     /*
-     * 断言的是**可观察的结果**（跑完之后 JWKS 里有钥匙），不是返回值。
+     * 这条正是 #36 的核心。此前 getCurrentSigningKey 只筛 status='active'、
+     * 不看 expires_at，于是轮换一停就拿过期钥匙继续签 —— 签出来的 kid 不在
+     * JWKS 里（getPublicKeys 已经把它剔了）。
      *
-     * 返回值在这里是 `false`，而且这不是 bug：钥匙是 getCurrentSigningKey
-     * 内部懒创建的，checkAndRotateKeys 拿到的已经是一把刚建好的新钥匙，
-     * 于是「没到 90 天」→ 返回 false。
-     *
-     * 顺带发现：checkAndRotateKeys 里的 `if (!currentKey)` 分支因此
-     * **不可达** —— getCurrentSigningKey 在 D1 可写时永远不返回 null。
-     * 那是无害的防御性代码，本 PR 不动它，只在这里记一笔，
-     * 免得下次有人照着返回值去推断行为。
+     * 现在：签名路径发现没有未过期的 active 钥匙，就即时轮换补一把。
+     * 断言的是**不变量本身**：签出来的 kid 一定出现在 JWKS 里。
      */
     const db = realDb();
-    await checkAndRotateKeys(db, memKv(), SECRET);
-    const keys = await getPublicKeys(db);
-    assert.equal(keys.length, 1, '跑完之后 JWKS 里应当有一把钥匙');
+    const kv = memKv();
+    const expiredKid = await seedKey(db, kv, 200 * DAY, -110 * DAY);
+
+    // 传空 KV：强制走 D1，正是老代码只筛 status 的那条路径
+    const current = await getCurrentSigningKey(db, memKv(), SECRET);
+    assert.notEqual(current.kid, expiredKid, '绝不能再拿那把过期钥匙签名');
+
+    const jwksKids = (await getPublicKeys(db)).map((k: any) => k.kid);
+    assert.ok(
+      jwksKids.includes(current.kid),
+      `签名用的 kid=${current.kid} 必须在 JWKS 里，实际 JWKS=${JSON.stringify(jwksKids)}`,
+    );
   });
 
-  test('钥匙还年轻时什么都不做', async () => {
+  test('KV 缓存指向一把已过期钥匙时不被采信，回落到 D1 / 轮换', async () => {
+    /*
+     * KV 命中此前是无条件返回的。它没有自己的 TTL 语义（代码靠 JSON 里的
+     * expiresAt 判断），所以一旦缓存的是过期钥匙，就会一直拿它签。
+     */
+    const db = realDb();
+    const kv = memKv();
+    const freshKid = await seedKey(db, kv, 1 * DAY, 89 * DAY); // D1 里有一把好钥匙
+    seedKvCurrent(kv, 'stale-expired-kid', Date.now() - 1 * DAY); // KV 指向过期的
+
+    const current = await getCurrentSigningKey(db, kv, SECRET);
+    assert.notEqual(current.kid, 'stale-expired-kid', '不能采信过期的 KV 缓存');
+    assert.equal(current.kid, freshKid, '应回落到 D1 里那把未过期的');
+  });
+
+  test('未过期的 active 钥匙照常直接返回（没有无谓轮换）', async () => {
+    const db = realDb();
+    const kv = memKv();
+    const kid = await seedKey(db, kv, 10 * DAY, 80 * DAY);
+    const current = await getCurrentSigningKey(db, memKv(), SECRET);
+    assert.equal(current.kid, kid);
+    // 没有额外的钥匙被造出来
+    const count = db.raw.prepare('SELECT COUNT(*) AS n FROM signing_keys').get().n;
+    assert.equal(count, 1, '有可用钥匙时不该再造新的');
+  });
+
+  test('空库：签名路径补出一把钥匙，并且它就在 JWKS 里', async () => {
+    const db = realDb();
+    const current = await getCurrentSigningKey(db, memKv(), SECRET);
+    const jwksKids = (await getPublicKeys(db)).map((k: any) => k.kid);
+    assert.ok(jwksKids.includes(current.kid));
+  });
+});
+
+describe('JWKS 端点不返回空集（getOrCreatePublicKeys）', () => {
+  test('空库时也补出钥匙 —— 响应会被缓存一小时，绝不能是空的', async () => {
+    const db = realDb();
+    const keys = await getOrCreatePublicKeys(db, memKv(), SECRET);
+    assert.ok(keys.length >= 1, 'JWKS 端点决不能发布空集');
+  });
+
+  test('所有钥匙都过了宽限期时，补一把新的再发布', async () => {
+    const db = realDb();
+    const kv = memKv();
+    await seedKey(db, kv, 200 * DAY, -110 * DAY); // 唯一的钥匙，过期且超宽限
+    assert.deepEqual(await getPublicKeys(db), [], '前提：直接读是空的');
+
+    const keys = await getOrCreatePublicKeys(db, memKv(), SECRET);
+    assert.ok(keys.length >= 1, '兜底之后必须非空');
+  });
+
+  test('已经有可用钥匙时，不额外造钥匙', async () => {
+    const db = realDb();
+    const kv = memKv();
+    await seedKey(db, kv, 10 * DAY, 80 * DAY);
+    await getOrCreatePublicKeys(db, memKv(), SECRET);
+    const count = db.raw.prepare('SELECT COUNT(*) AS n FROM signing_keys').get().n;
+    assert.equal(count, 1, '有可用钥匙就不该走补钥匙那条路');
+  });
+});
+
+describe('轮换的判断直接读 D1（checkAndRotateKeys）', () => {
+  test('空库会生成初始钥匙，且返回 true', async () => {
+    const db = realDb();
+    const rotated = await checkAndRotateKeys(db, memKv(), SECRET);
+    assert.equal(rotated, true, '空库必须轮换出初始钥匙');
+    assert.equal((await getPublicKeys(db)).length, 1);
+  });
+
+  test('钥匙还年轻、离过期还远时什么都不做', async () => {
     const db = realDb();
     const kv = memKv();
     const kid = await seedKey(db, kv, 10 * DAY, 80 * DAY);
     const rotated = await checkAndRotateKeys(db, memKv(), SECRET);
-    assert.equal(rotated, false, '还没到 90 天就轮换 = 白白让旧 token 验不了');
+    assert.equal(rotated, false, '还早得很就轮换 = 白白让旧 token 验不了');
     assert.deepEqual((await getPublicKeys(db)).map((k: any) => k.kid), [kid]);
   });
 
-  test('钥匙超过 90 天时会轮换，且轮换后 JWKS 不为空', async () => {
+  test('临近过期（进入 7 天窗口）就提前轮换 —— 新钥匙先发布', async () => {
     /*
-     * 这条是整件事的收口：**只要定时任务真的跑起来，线上那个空 JWKS
-     * 就会自己恢复。**
+     * 主动轮换的意义：新钥匙必须在旧钥匙还能用的时候就已经进 JWKS，
+     * 客户端才有时间刷新缓存。所以判断是「离过期 ≤ 7 天」就换，而不是
+     * 「已经过期」才换。
      */
     const db = realDb();
     const kv = memKv();
-    const kid = await seedKey(db, kv, 200 * DAY, -110 * DAY);
+    const oldKid = await seedKey(db, kv, 86 * DAY, 4 * DAY); // 还有 4 天过期
     const rotated = await checkAndRotateKeys(db, memKv(), SECRET);
-    assert.equal(rotated, true, '过了 90 天却没轮换');
+    assert.equal(rotated, true, '进入 7 天窗口就该提前轮换');
 
-    const keys = await getPublicKeys(db);
-    assert.ok(keys.length >= 1, '轮换之后 JWKS 仍然是空的');
+    const jwksKids = (await getPublicKeys(db)).map((k: any) => k.kid);
+    assert.ok(jwksKids.includes(oldKid), '旧钥匙在宽限期内仍需发布');
+    assert.equal(jwksKids.length, 2, '新旧两把都应在 JWKS 里');
+  });
+
+  test('轮换的判断不被签名侧的懒补钥匙掩盖', async () => {
+    /*
+     * 老实现里 checkAndRotateKeys 先调 getCurrentSigningKey，而后者会懒补
+     * 一把新钥匙，于是「按 createdAt 判断年龄」永远看到的是刚建的新钥匙，
+     * 90 天检查永远不触发。现在它直接查 D1 的 active 行。
+     *
+     * 这里摆一把「早就过期」的 active 钥匙：若判断被掩盖，就会返回 false。
+     */
+    const db = realDb();
+    const kv = memKv();
+    await seedKey(db, kv, 200 * DAY, -110 * DAY);
+    const rotated = await checkAndRotateKeys(db, memKv(), SECRET);
+    assert.equal(rotated, true, '过期的 active 钥匙必须触发轮换');
+    assert.ok((await getPublicKeys(db)).length >= 1, '轮换后 JWKS 非空');
+  });
+
+  test('轮换时旧钥匙的宽限期从轮换那一刻算起，不被立即吊销', async () => {
+    /*
+     * 老 rotateSigningKeys 按 created_at 立即 revoke：一把 90 天的钥匙在
+     * 轮换的同一刻就被吊销，说好的 7 天宽限实际是 0 天。现在按 expires_at
+     * 判断，且轮换时把旧 active 的 expires_at 收敛到「此刻」——宽限从现在起算。
+     */
+    const db = realDb();
+    const kv = memKv();
+    const oldKid = await seedKey(db, kv, 89 * DAY, 1 * DAY); // 明天到期
+    await checkAndRotateKeys(db, memKv(), SECRET);
+
+    const oldRow: any = db.raw
+      .prepare('SELECT status FROM signing_keys WHERE kid = ?')
+      .get(oldKid);
+    assert.equal(oldRow.status, 'rotating', '旧钥匙应转入 rotating，而不是立刻 revoked');
+    assert.ok(
+      (await getPublicKeys(db)).map((k: any) => k.kid).includes(oldKid),
+      '刚轮换下来的旧钥匙仍应发布，供在途 token 验签',
+    );
+  });
+
+  test('宽限期过后，旧的 rotating 钥匙才被吊销、退出 JWKS', async () => {
+    const db = realDb();
+    const kv = memKv();
+    // 一把 active 好钥匙 + 一把早已超宽限的 rotating 钥匙
+    const activeKid = await seedKey(db, kv, 1 * DAY, 89 * DAY);
+    const staleKid = await seedKey(db, kv, 100 * DAY, -10 * DAY, 'rotating');
+
+    const rotated = await checkAndRotateKeys(db, memKv(), SECRET);
+    assert.equal(rotated, false, 'active 钥匙还年轻，不该轮换');
+
+    const staleRow: any = db.raw
+      .prepare('SELECT status FROM signing_keys WHERE kid = ?')
+      .get(staleKid);
+    assert.equal(staleRow.status, 'revoked', '超宽限的 rotating 钥匙应被吊销');
+
+    const jwksKids = (await getPublicKeys(db)).map((k: any) => k.kid);
+    assert.deepEqual(jwksKids, [activeKid], '只剩那把 active 钥匙对外发布');
   });
 });

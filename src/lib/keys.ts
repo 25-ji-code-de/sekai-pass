@@ -34,6 +34,9 @@ export interface SigningKey {
 
 const KV_KEY_PREFIX = "signing_key:";
 const KV_CURRENT_KEY = "current_signing_key";
+const KEY_LIFETIME_MS = 90 * 24 * 60 * 60 * 1000;
+const VERIFICATION_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+const ROTATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Generate ES256 key pair
@@ -198,7 +201,7 @@ export async function storeSigningKey(
   encryptionKey: string
 ): Promise<void> {
   const now = Date.now();
-  const expiresAt = now + 90 * 24 * 60 * 60 * 1000; // 90 days
+  const expiresAt = now + KEY_LIFETIME_MS;
 
   // Encrypt private key
   const encryptedPrivateKey = await encryptPrivateKey(key.privateKey, encryptionKey);
@@ -228,7 +231,7 @@ export async function storeSigningKey(
       createdAt: now,
       expiresAt: expiresAt
     }),
-    { expirationTtl: 90 * 24 * 60 * 60 } // 90 days
+    { expirationTtl: KEY_LIFETIME_MS / 1000 }
   );
 
   // Update current key pointer
@@ -236,89 +239,101 @@ export async function storeSigningKey(
 }
 
 /**
- * Get current signing key (KV cached)
+ * Convert a D1 signing-key row into the shape used by the signer.
+ */
+async function signingKeyFromRow(
+  row: Record<string, unknown>,
+  encryptionKey: string
+): Promise<SigningKey> {
+  return {
+    kid: row.kid as string,
+    publicKeyJWK: JSON.parse(row.public_key_jwk as string),
+    privateKeyJWK: await decryptPrivateKey(row.private_key_jwk as string, encryptionKey),
+    algorithm: row.algorithm as string,
+    createdAt: row.created_at as number,
+    expiresAt: row.expires_at as number,
+    revokedAt: row.revoked_at as number | null,
+    status: row.status as SigningKey["status"]
+  };
+}
+
+async function cacheSigningKey(kv: KVNamespace, key: SigningKey): Promise<void> {
+  const remainingSeconds = Math.max(60, Math.ceil((key.expiresAt - Date.now()) / 1000));
+
+  await kv.put(
+    `${KV_KEY_PREFIX}${key.kid}`,
+    JSON.stringify({
+      kid: key.kid,
+      publicKey: key.publicKeyJWK,
+      privateKey: key.privateKeyJWK,
+      algorithm: key.algorithm,
+      createdAt: key.createdAt,
+      expiresAt: key.expiresAt
+    }),
+    { expirationTtl: remainingSeconds }
+  );
+  await kv.put(KV_CURRENT_KEY, key.kid);
+}
+
+/**
+ * Get an unexpired key for new signatures. If scheduled rotation has stopped,
+ * this request-path guard rotates instead of signing with a key absent from
+ * JWKS.
  */
 export async function getCurrentSigningKey(
   db: D1Database,
   kv: KVNamespace,
   encryptionKey: string
-): Promise<SigningKey | null> {
-  // Try to get current key ID from KV
+): Promise<SigningKey> {
+  const now = Date.now();
   const currentKid = await kv.get(KV_CURRENT_KEY);
 
   if (currentKid) {
-    // Try to get key from KV cache
     const cachedKey = await kv.get(`${KV_KEY_PREFIX}${currentKid}`);
     if (cachedKey) {
       const keyData = JSON.parse(cachedKey);
-      return {
-        kid: keyData.kid,
-        publicKeyJWK: keyData.publicKey,
-        privateKeyJWK: keyData.privateKey,
-        algorithm: keyData.algorithm,
-        createdAt: keyData.createdAt,
-        expiresAt: keyData.expiresAt,
-        revokedAt: null,
-        status: "active"
-      };
+      if (keyData.expiresAt > now) {
+        return {
+          kid: keyData.kid,
+          publicKeyJWK: keyData.publicKey,
+          privateKeyJWK: keyData.privateKey,
+          algorithm: keyData.algorithm,
+          createdAt: keyData.createdAt,
+          expiresAt: keyData.expiresAt,
+          revokedAt: null,
+          status: "active"
+        };
+      }
+
+      // The pointer has no TTL of its own. Remove it so an expired cache entry
+      // cannot remain the preferred signing key indefinitely.
+      await kv.delete(KV_CURRENT_KEY);
+      await kv.delete(`${KV_KEY_PREFIX}${currentKid}`);
     }
   }
 
-  // Fallback to D1
-  const result = await db.prepare(
-    `SELECT * FROM signing_keys WHERE status = 'active' ORDER BY created_at DESC LIMIT 1`
-  ).first();
+  const loadUsableKey = () => db.prepare(
+    `SELECT * FROM signing_keys
+     WHERE status = 'active' AND expires_at > ?
+     ORDER BY created_at DESC LIMIT 1`
+  ).bind(now).first();
+
+  let result = await loadUsableKey();
 
   if (!result) {
-    // No signing key exists, generate one automatically
-    const newKey = await generateSigningKey();
-    await storeSigningKey(db, kv, newKey, encryptionKey);
-
-    return {
-      kid: newKey.kid,
-      publicKeyJWK: newKey.publicKey,
-      privateKeyJWK: newKey.privateKey,
-      algorithm: "ES256",
-      createdAt: Date.now(),
-      expiresAt: Date.now() + 90 * 24 * 60 * 60 * 1000,
-      revokedAt: null,
-      status: "active"
-    };
+    // This also handles an empty database. Marking expired active keys as
+    // rotating preserves them in JWKS for verification grace while the newly
+    // generated active key is used for all new signatures.
+    await rotateSigningKeys(db, kv, encryptionKey);
+    result = await loadUsableKey();
   }
 
-  // Decrypt private key
-  const privateKey = await decryptPrivateKey(
-    result.private_key_jwk as string,
-    encryptionKey
-  );
+  if (!result) {
+    throw new Error("Failed to create an active signing key");
+  }
 
-  const signingKey: SigningKey = {
-    kid: result.kid as string,
-    publicKeyJWK: JSON.parse(result.public_key_jwk as string),
-    privateKeyJWK: privateKey,
-    algorithm: result.algorithm as string,
-    createdAt: result.created_at as number,
-    expiresAt: result.expires_at as number,
-    revokedAt: result.revoked_at as number | null,
-    status: result.status as "active" | "rotating" | "revoked"
-  };
-
-  // Update KV cache
-  await kv.put(
-    `${KV_KEY_PREFIX}${signingKey.kid}`,
-    JSON.stringify({
-      kid: signingKey.kid,
-      publicKey: signingKey.publicKeyJWK,
-      privateKey: signingKey.privateKeyJWK,
-      algorithm: signingKey.algorithm,
-      createdAt: signingKey.createdAt,
-      expiresAt: signingKey.expiresAt
-    }),
-    { expirationTtl: 90 * 24 * 60 * 60 }
-  );
-
-  await kv.put(KV_CURRENT_KEY, signingKey.kid);
-
+  const signingKey = await signingKeyFromRow(result, encryptionKey);
+  await cacheSigningKey(kv, signingKey);
   return signingKey;
 }
 
@@ -327,16 +342,35 @@ export async function getCurrentSigningKey(
  */
 export async function getPublicKeys(db: D1Database): Promise<JsonWebKey[]> {
   const now = Date.now();
-  const gracePeriod = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-  // Get active keys and recently expired keys (grace period)
+  // Keep recently expired keys published so already-issued ID tokens remain
+  // verifiable during the grace period. New tokens never use these keys.
   const results = await db.prepare(
     `SELECT kid, public_key_jwk FROM signing_keys
-     WHERE status != 'revoked' AND (expires_at > ? OR expires_at > ?)
+     WHERE status != 'revoked' AND expires_at > ?
      ORDER BY created_at DESC`
-  ).bind(now, now - gracePeriod).all();
+  ).bind(now - VERIFICATION_GRACE_MS).all();
 
   return results.results.map((row: any) => JSON.parse(row.public_key_jwk));
+}
+
+/**
+ * Return a non-empty JWKS even on a cold database or after scheduled rotation
+ * has stopped past the verification grace period. This is deliberately only a
+ * fallback: ordinary JWKS reads do not decrypt or generate private keys.
+ */
+export async function getOrCreatePublicKeys(
+  db: D1Database,
+  kv: KVNamespace,
+  encryptionKey: string
+): Promise<JsonWebKey[]> {
+  const publicKeys = await getPublicKeys(db);
+  if (publicKeys.length > 0) {
+    return publicKeys;
+  }
+
+  await getCurrentSigningKey(db, kv, encryptionKey);
+  return getPublicKeys(db);
 }
 
 /**
@@ -367,10 +401,15 @@ export async function rotateSigningKeys(
 ): Promise<void> {
   const now = Date.now();
 
-  // Mark current active key as rotating
+  // Stop using every current active key for new signatures. expires_at is the
+  // last moment a key may sign, so pinning it to the rotation time starts the
+  // verification grace window now — whether we rotate early (proactive) or late
+  // (a key that already outlived its lifetime). Late rotation still keeps the
+  // old key published for the full grace, covering any token the request-path
+  // guard signed just before it noticed the expiry.
   await db.prepare(
-    `UPDATE signing_keys SET status = 'rotating' WHERE status = 'active'`
-  ).run();
+    `UPDATE signing_keys SET status = 'rotating', expires_at = ? WHERE status = 'active'`
+  ).bind(now).run();
 
   // Generate new key
   const newKey = await generateSigningKey();
@@ -378,12 +417,13 @@ export async function rotateSigningKeys(
   // Store new key
   await storeSigningKey(db, kv, newKey, encryptionKey);
 
-  // After grace period (7 days), revoke old keys
-  const gracePeriodEnd = now - 7 * 24 * 60 * 60 * 1000;
+  // Keep old keys available until seven days after their signing lifetime ends.
+  // The previous created_at predicate revoked a 90-day-old key immediately at
+  // rotation time, despite JWKS promising a seven-day verification grace.
   await db.prepare(
     `UPDATE signing_keys SET status = 'revoked', revoked_at = ?
-     WHERE status = 'rotating' AND created_at < ?`
-  ).bind(now, gracePeriodEnd).run();
+     WHERE status = 'rotating' AND expires_at <= ?`
+  ).bind(now, now - VERIFICATION_GRACE_MS).run();
 }
 
 /**
@@ -394,23 +434,33 @@ export async function checkAndRotateKeys(
   kv: KVNamespace,
   encryptionKey: string
 ): Promise<boolean> {
-  const currentKey = await getCurrentSigningKey(db, kv, encryptionKey);
-
-  if (!currentKey) {
-    // No key exists, generate initial key
-    const newKey = await generateSigningKey();
-    await storeSigningKey(db, kv, newKey, encryptionKey);
-    return true;
-  }
-
   const now = Date.now();
-  const rotationThreshold = 90 * 24 * 60 * 60 * 1000; // 90 days
+  const currentKey = await db.prepare(
+    `SELECT created_at, expires_at FROM signing_keys
+     WHERE status = 'active'
+     ORDER BY created_at DESC LIMIT 1`
+  ).first();
 
-  // Check if key is older than rotation threshold
-  if (now - currentKey.createdAt >= rotationThreshold) {
+  // Rotation policy must read D1 directly. getCurrentSigningKey is a
+  // request-path safety net that can create a fresh key, which would hide the
+  // expired/missing state this scheduled check is responsible for detecting.
+  // Rotate before expiry so the new key is published before it is needed.
+  // Request-path expiry checks remain the safety net if scheduled execution
+  // stops entirely.
+  if (
+    !currentKey ||
+    (currentKey.expires_at as number) <= now + ROTATION_WINDOW_MS ||
+    now - (currentKey.created_at as number) >= KEY_LIFETIME_MS - ROTATION_WINDOW_MS
+  ) {
     await rotateSigningKeys(db, kv, encryptionKey);
     return true;
   }
+
+  // Retire old verification-only keys even when the active key is still young.
+  await db.prepare(
+    `UPDATE signing_keys SET status = 'revoked', revoked_at = ?
+     WHERE status = 'rotating' AND expires_at <= ?`
+  ).bind(now, now - VERIFICATION_GRACE_MS).run();
 
   return false;
 }

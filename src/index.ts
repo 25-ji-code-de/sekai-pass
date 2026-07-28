@@ -28,7 +28,7 @@ import {
   generateOIDCMetadata,
   generateAuthorizationServerMetadata
 } from "./lib/oidc-discovery.ts";
-import { getPublicKeys, checkAndRotateKeys } from "./lib/keys.ts";
+import { getOrCreatePublicKeys, checkAndRotateKeys } from "./lib/keys.ts";
 import { bearerChallenge } from "./lib/bearer-challenge.ts";
 import { revokeToken } from "./lib/revoke.ts";
 import { authenticateClient } from "./lib/client-auth.ts";
@@ -243,7 +243,14 @@ app.get("/.well-known/openid-configuration", async (c) => {
 
 // JWKS (JSON Web Key Set) Endpoint
 app.get("/.well-known/jwks.json", async (c) => {
-  const publicKeys = await getPublicKeys(c.env.DB);
+  // Ensure a key exists before caching: the response below is cached for an
+  // hour, so publishing an empty set would strand every relying party for that
+  // long even after a key becomes available.
+  const publicKeys = await getOrCreatePublicKeys(
+    c.env.DB,
+    c.env.KV,
+    c.env.KEY_ENCRYPTION_SECRET
+  );
   return c.json({
     keys: publicKeys
   }, 200, {
@@ -763,23 +770,20 @@ app.get("*", async (c) => {
  * `crons = ["0 0 * * SUN"]`。Cloudflare 传给 `event.cron` 的**就是配置里
  * 那一行原文**，两个字符串不相等 —— 于是 checkAndRotateKeys 一次都没跑过。
  *
- * 后果不是「少转了一次密钥」：
- *   1. 密钥 90 天过期，而轮换从不发生
- *   2. getCurrentSigningKey 查的是 `status = 'active'`，**不看 expires_at**，
- *      于是继续拿那把过期的钥匙签 ID Token
- *   3. getPublicKeys 会把过期超过 7 天宽限期的钥匙排除出 JWKS
+ * 后果不是「少转了一次密钥」：cron 对不上（此前已修）只是触发器失灵，
+ * 而 keys.ts 里签名侧不看 expires_at、JWKS 又会把过期钥匙剔除，两者叠加
+ * 就成了「用一把没发布在 JWKS 里的钥匙签 token」。线上 jwks.json 实测返回
+ * `{"keys":[]}`，任何按 OIDC 规范拿 JWKS 验签的客户端都验不过。
  *
- * 三条合起来 = **用一把没有发布在 JWKS 里的钥匙签 token**。
- * 线上 /.well-known/jwks.json 实测返回 `{"keys":[]}`，
- * 而 discovery 里同时声明着 `id_token_signing_alg_values_supported`。
- * 任何按 OIDC 规范拿 JWKS 验签的客户端都验不过。
+ * ── 现在的分工 ──────────────────────────────────────────────────
  *
- * ── 为什么直接把比较删掉 ────────────────────────────────────────
+ * 这个定时任务是**主动轮换**：提前于过期换钥匙，让新钥匙在被需要前就已发布。
+ * keys.ts 的签名路径（getCurrentSigningKey）只是兜底 —— 只有当调度整个停摆、
+ * 现有钥匙都过期时，它才会即时补一把，绝不拿过期钥匙签名。
  *
- * 只有一条 cron，这个比较不提供任何东西，只提供一种失效方式。
- * checkAndRotateKeys 本身就是幂等的：没到 90 天它什么都不做。
- * 将来真要加第二条 cron，再按 event.cron 分派 —— 那时候
- * test/key-rotation.test.ts 会要求新加的字符串必须与配置对得上。
+ * cron 比较此前被删掉了：只有一条 cron，比较只提供一种失效方式；
+ * checkAndRotateKeys 本身幂等。将来加第二条 cron 再按 event.cron 分派 ——
+ * 那时 test/key-rotation.test.ts 会要求新字符串必须与配置对得上。
  */
 export default {
   fetch: app.fetch,

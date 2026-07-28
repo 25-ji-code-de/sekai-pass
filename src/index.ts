@@ -125,7 +125,17 @@ function parseRedirectUris(redirectUris: string): string[] {
 const CSP_ENFORCED = [
   "object-src 'none'",
   "base-uri 'self'",
-  "form-action 'self'",
+  /*
+   * ── form-action 不放在强制 CSP 里 ─────────────────────────────
+   *
+   * OAuth 授权页的表单 POST 到 /oauth/authorize 后，服务端返回 302
+   * redirect 到第三方域名（redirect_uri）。`form-action 'self'` 会阻止
+   * 这个跨域 redirect —— 浏览器不会跳转，也没有明显的错误提示。
+   *
+   * form-action 的目的是防止表单被劫持到恶意 URL，但授权页的
+   * redirect_uri 在 GET 和 POST 两个阶段都与服务端注册的值比对过了，
+   * 不依赖 CSP 做这个检查。
+   */
   "frame-ancestors 'none'",
 ].join('; ');
 
@@ -141,7 +151,8 @@ const CSP_REPORT_ONLY = [
   "connect-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
-  "form-action 'self'",
+  // form-action 同样不放这里 —— 见 CSP_ENFORCED 上方的说明。留在 Report-Only
+  // 里也不合适：它现在不拦截，但转正那天会用同一个方式打断授权跳转。
   "frame-ancestors 'none'",
 ].join('; ');
 

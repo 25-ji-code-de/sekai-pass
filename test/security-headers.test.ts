@@ -88,21 +88,26 @@ describe('其它基础安全头', () => {
 describe('CSP —— 强制生效的部分', () => {
   const csp = headerValue('Content-Security-Policy') ?? '';
 
-  test('四条零风险指令齐全', () => {
+  test('零风险指令齐全', () => {
     for (const directive of [
       "object-src 'none'",
       "base-uri 'self'",
-      "form-action 'self'",
       "frame-ancestors 'none'",
     ]) {
       assert.ok(csp.includes(directive), `缺少 ${directive}`);
     }
   });
 
-  test("form-action 是 'self' 而不是 'none'", () => {
-    // 同意页本身有个 POST 到 /oauth/authorize 的表单，写 'none' 会直接把授权流程打断
-    assert.ok(csp.includes("form-action 'self'"));
-    assert.ok(!csp.includes("form-action 'none'"));
+  test('不含 form-action —— 它会拦掉 OAuth 授权页 POST 后的跨域 302 跳转', () => {
+    /*
+     * 浏览器把表单提交后的重定向也拿去和 form-action 比对。授权页 POST 到
+     * /oauth/authorize，服务端 302 跳到第三方 redirect_uri —— form-action
+     * 'self'（甚至 'none'）会静默拦掉这一跳，用户点了「允许」却不跳转。
+     *
+     * redirect_uri 的安全性由服务端在 GET/POST 两阶段与注册值比对来保证，
+     * 不依赖 CSP。所以这里不设 form-action，而不是设成某个值。
+     */
+    assert.ok(!csp.includes('form-action'), 'CSP_ENFORCED 不应包含 form-action');
   });
 
   test('强制生效的部分不含 default-src —— 那会立刻拦掉资源', () => {

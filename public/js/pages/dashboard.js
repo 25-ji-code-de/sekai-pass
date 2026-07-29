@@ -19,16 +19,15 @@ export async function renderDashboard(app, api, navigate) {
       <div id="user-info" class="user-info">
         <p><strong>加载中...</strong></p>
       </div>
-      <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-        <button id="apps-btn" class="btn-auto">开放平台</button>
-          <button id="settings-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: auto; min-width: 120px;">账号设置</button>
+      <div class="dashboard-actions">
+        <button id="settings-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: auto; min-width: 120px;">账号设置</button>
         <button id="logout-btn" class="btn-secondary btn-auto">退出登录</button>
       </div>
-      <div style="clear: both;"></div>
     </div>
     <footer class="site-footer">
-      <a href="https://docs.nightcord.de5.net/legal/complete/privacy-sekai-pass" target="_blank">隐私政策</a> |
-      <a href="https://docs.nightcord.de5.net/legal/complete/terms-sekai-pass" target="_blank">用户服务协议</a>
+      <a href="/apps" data-link>开放平台</a> |
+      <a href="https://docs.nightcord.de5.net/legal/complete/privacy-sekai-pass" target="_blank" rel="noopener">隐私政策</a> |
+      <a href="https://docs.nightcord.de5.net/legal/complete/terms-sekai-pass" target="_blank" rel="noopener">用户服务协议</a>
     </footer>
   `;
 
@@ -53,12 +52,17 @@ export async function renderDashboard(app, api, navigate) {
     }
   }
 
-  // Handle settings
-  document.getElementById('apps-btn').addEventListener('click', () => navigate('/apps'));
-
   const settingsBtn = document.getElementById('settings-btn');
   settingsBtn.addEventListener('click', () => {
     navigate('/settings');
+  });
+
+  // 页脚里的站内链接走 SPA 导航，外链保持默认行为
+  app.querySelectorAll('a[data-link]').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      navigate(link.getAttribute('href'));
+    });
   });
 
   // Handle logout

@@ -1,0 +1,305 @@
+/* @sekai-vendor @sekai/design@v0.1.0 css/layout/auth.css */
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
+
+/* ============================================================
+   Auth — the SEKAI Pass screens
+   ------------------------------------------------------------
+   One centred panel on a grid field, capped with an accent
+   hairline. Everything on these screens is either the thing you
+   are deciding about (large, sans) or the machinery behind it
+   (small, mono, dim).
+   ============================================================ */
+
+/* Put this on <body> for a single-panel auth page. */
+.sekai-auth-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--sekai-space-lg);
+  background-color: rgb(var(--sekai-canvas));
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.sekai-auth {
+  position: relative;
+  width: min(90vw, 350px);
+  /* 42px is the Pass panel's own padding — deliberately off the 8px
+     ladder. It is what makes the card feel unhurried; the nearest
+     ladder step (32px) reads cramped and 48px reads slack. */
+  padding: 42px;
+  background: rgb(var(--sekai-surface));
+  border: var(--sekai-hairline);
+  border-radius: var(--sekai-radius-md);
+  box-shadow: var(--sekai-elev-4);
+  overflow: hidden;
+}
+
+/* The cap. One per screen. */
+.sekai-auth::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--sekai-accent-deep)),
+    rgb(var(--sekai-accent)),
+    rgb(var(--sekai-accent-deep))
+  );
+}
+
+.sekai-auth--wide {
+  width: min(90vw, 500px);
+}
+
+/* ---------- Logo + system signature ---------- */
+.sekai-auth__logo {
+  position: relative;
+  margin-bottom: var(--sekai-space-3xl);
+  text-align: center;
+}
+
+.sekai-auth__logo img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: var(--sekai-radius-xs);
+}
+
+/* Set data-sig to change the stamp; it defaults to the Pass one. */
+.sekai-auth__logo::after {
+  content: "SEKAI PASS // SYSTEM";
+  display: block;
+  margin-top: var(--sekai-space-md);
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-micro);
+  letter-spacing: var(--sekai-tracking-widest);
+  color: rgb(var(--sekai-fg-muted));
+  opacity: 0.6;
+}
+
+.sekai-auth__logo[data-sig]::after {
+  content: attr(data-sig);
+}
+
+/* ---------- Header ---------- */
+.sekai-auth__header {
+  margin-bottom: 30px;
+  padding-bottom: var(--sekai-space-2xl);
+  border-bottom: var(--sekai-hairline-divider);
+  text-align: center;
+}
+
+.sekai-auth__title {
+  margin-bottom: var(--sekai-space-xs);
+  font-size: var(--sekai-text-xl);
+  font-weight: var(--sekai-weight-semibold);
+  letter-spacing: var(--sekai-tracking-tight);
+  color: rgb(var(--sekai-fg));
+}
+
+.sekai-auth__subtitle {
+  margin-bottom: var(--sekai-space-3xl);
+  font-size: var(--sekai-text-sm);
+  line-height: var(--sekai-leading);
+  color: rgb(var(--sekai-fg-muted));
+  text-align: center;
+}
+
+/* ---------- Connection visual ----------
+   Two entities and the live line between them. This is the whole
+   argument of an OAuth consent screen in one picture: who is
+   talking to whom, and that it is happening now. */
+.sekai-connection {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 0 30px;
+  padding: 0 10px;
+}
+
+.sekai-entity {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sekai-entity__avatar {
+  margin-bottom: 10px;
+}
+
+.sekai-entity__label {
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-micro);
+  font-weight: var(--sekai-weight-semibold);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: rgb(var(--sekai-fg-muted));
+}
+
+/* Negative bottom margin lifts the line onto the avatars' centre
+   line rather than the label's. */
+.sekai-connection .sekai-flow {
+  margin: 0 var(--sekai-space-lg) -22px;
+}
+
+.sekai-connection__badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: rgb(var(--sekai-surface));
+  border: var(--sekai-hairline);
+  border-radius: var(--sekai-radius-full);
+  box-shadow: 0 0 10px rgb(var(--sekai-surface));
+  color: rgb(var(--sekai-fg-muted));
+  font-size: var(--sekai-text-label);
+}
+
+/* ---------- Scope rows ---------- */
+.sekai-scope__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background: rgb(60 60 70 / 0.3);
+  border: 1px solid rgb(255 255 255 / 0.05);
+  border-radius: var(--sekai-radius-sm);
+  color: rgb(var(--sekai-accent));
+}
+
+.sekai-scope__content {
+  flex: 1;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.sekai-scope__name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sekai-space-sm);
+  margin-bottom: var(--sekai-space-2xs);
+  font-size: var(--sekai-text-sm);
+  font-weight: var(--sekai-weight-semibold);
+  color: rgb(var(--sekai-fg));
+}
+
+.sekai-scope__desc {
+  font-size: var(--sekai-text-label);
+  line-height: var(--sekai-leading-tight);
+  color: rgb(var(--sekai-fg-muted));
+}
+
+/* ---------- Footnotes ---------- */
+.sekai-security-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sekai-space-sm);
+  margin-top: var(--sekai-space-xl);
+  padding-top: var(--sekai-space-lg);
+  border-top: var(--sekai-hairline-divider);
+  font-size: var(--sekai-text-meta);
+  color: rgb(var(--sekai-fg-muted));
+}
+
+.sekai-privacy-note {
+  margin-top: var(--sekai-space-2xl);
+  text-align: center;
+  font-size: var(--sekai-text-meta);
+  line-height: var(--sekai-leading-relaxed);
+  color: rgb(255 255 255 / 0.2);
+}
+
+.sekai-auth__link {
+  margin-top: var(--sekai-space-3xl);
+  text-align: center;
+  font-size: var(--sekai-text-sm);
+  color: rgb(var(--sekai-fg-muted));
+}
+
+.sekai-auth__link a {
+  color: rgb(var(--sekai-fg-muted));
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+  transition: color var(--sekai-dur);
+}
+
+.sekai-auth__link a:hover {
+  color: rgb(var(--sekai-accent));
+}
+
+/* ---------- Captcha slot ----------
+   Reserves the widget's height so the panel doesn't jump when a
+   third-party iframe finally paints. */
+.sekai-captcha-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 65px;
+  margin: var(--sekai-space-lg) 0;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+  .sekai-auth {
+    padding: var(--sekai-space-2xl);
+  }
+
+  .sekai-connection {
+    flex-direction: column;
+    gap: var(--sekai-space-xl);
+  }
+
+  .sekai-connection .sekai-flow {
+    flex: none;
+    width: 1px;
+    height: 40px;
+    margin: 0;
+  }
+
+  /* The horizontal packet animation has to become a vertical one —
+     see .sekai-flow--vertical in signatures.css. */
+  .sekai-connection .sekai-flow::before {
+    width: 3px;
+    height: 100%;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      transparent 30%,
+      rgb(var(--sekai-accent)) 50%,
+      transparent 70%,
+      transparent 100%
+    );
+    background-size: 100% 200%;
+    animation: sekai-flow-y 2s infinite linear;
+  }
+}
+
+@media (max-width: 480px) {
+  .sekai-auth__logo img {
+    width: 200px;
+  }
+}

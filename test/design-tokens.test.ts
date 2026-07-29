@@ -336,10 +336,10 @@ describe('圆角走 token', () => {
   const KEEP = new Map([
     ['50%', '圆形是形状声明，不是尺寸档位（4 处：loading / connection-icon / avatar-preview / pow-spinner）'],
     ['2px', '没有对应档位（连接线与上传进度条的端头）'],
-    // .app-badge。上游 sekai-design 的 .sekai-badge--pill 就是
+    // .op-app__badge / .app-badge。上游 sekai-design 的 .sekai-badge--pill 就是
     // `padding: 2px 9px; border-radius: 10px`，逐字相同，且上游自己也没有
     // 把这个 10px 换成 token。跟着上游走，而不是自作主张换成 radius-full。
-    ['10px', '与上游 .sekai-badge--pill 逐字对齐（卡片头部的药丸徽章）'],
+    ['10px', '与上游 .sekai-badge--pill 逐字对齐（开放平台条目的药丸徽章）'],
   ]);
 
   test('没有新的硬编码圆角', () => {

@@ -58,6 +58,8 @@ export function renderPage(title: string, content: string): string {
   <link rel="stylesheet" href="/css/sekai/contract.css">
   <link rel="stylesheet" href="/css/sekai/world-system.css">
   <link rel="stylesheet" href="/css/sekai/world-night.css">
+  <link rel="stylesheet" href="/css/sekai/signatures.css">
+  <link rel="stylesheet" href="/css/sekai/auth.css">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
@@ -138,26 +140,26 @@ export function authorizePage(app: any, user: any): string {
   return renderPage("授权访问", `
     <div class="auth-flow-container">
       
-      <div class="connection-visual">
-         <div class="entity user">
-           <div class="entity-avatar">
+      <div class="connection-visual sekai-connection">
+         <div class="entity sekai-entity user">
+           <div class="entity-avatar sekai-entity__avatar">
              ${escapeHtml(userInitial)}
            </div>
-           <div class="entity-label">YOU</div>
+           <div class="entity-label sekai-entity__label">YOU</div>
          </div>
          
-         <div class="connection-line">
-            <div class="connection-icon">
+         <div class="connection-line sekai-flow">
+            <div class="connection-icon sekai-connection__badge">
               <!-- Lock icon -->
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
             </div>
          </div>
 
-         <div class="entity app">
-           <div class="entity-avatar">
+         <div class="entity sekai-entity app">
+           <div class="entity-avatar sekai-entity__avatar">
              ${escapeHtml(initial)}
            </div>
-           <div class="entity-label">APP</div>
+           <div class="entity-label sekai-entity__label">APP</div>
          </div>
       </div>
 

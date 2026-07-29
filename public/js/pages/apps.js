@@ -24,33 +24,53 @@ export async function renderApps(app, api, navigate) {
   }
   api.setAuthToken(token);
 
+  /*
+   * 开放平台是独立页面，不复用仪表板的 user-info 卡片布局。
+   * 入口在仪表板页脚链接，不在顶部按钮行。
+   */
   app.innerHTML = `
-    <div class="container">
-      <div class="logo">
-        <img src="/logo.png" alt="SEKAI Pass" width="300" />
+    <div class="container open-platform">
+      <div class="open-platform-brand">
+        <a href="/" data-link class="open-platform-home" title="返回仪表板">
+          <img src="/logo.png" alt="SEKAI Pass" width="180" />
+        </a>
       </div>
 
-      <div class="page-header">
-        <h2>开放平台</h2>
-        <p class="page-subtitle">管理你的 OAuth 应用</p>
-      </div>
+      <header class="open-platform-header">
+        <p class="open-platform-kicker">DEVELOPER</p>
+        <h1>开放平台</h1>
+        <p class="page-subtitle">管理你的 OAuth 应用 · 接入 SEKAI Pass 登录</p>
+      </header>
 
       <div id="error-message" class="error" style="display: none;"></div>
       <div id="success-message" class="success" style="display: none;"></div>
 
-      <div id="apps-list"><p class="loading-text">加载中...</p></div>
-
-      <div class="apps-actions">
-        <button id="new-app-btn">创建应用</button>
-        <button id="back-btn" class="btn-secondary">返回</button>
+      <div class="open-platform-toolbar apps-actions">
+        <button id="new-app-btn" class="btn-auto">创建应用</button>
+        <button id="back-btn" class="btn-secondary btn-auto">返回仪表板</button>
       </div>
 
-      <div id="app-form-container"></div>
+      <div id="apps-list" class="open-platform-list"><p class="loading-text">加载中...</p></div>
+
+      <div id="app-form-container" class="open-platform-panel"></div>
     </div>
+
+    <footer class="site-footer">
+      <a href="/" data-link>仪表板</a> |
+      <a href="https://docs.nightcord.de5.net/legal/complete/privacy-sekai-pass" target="_blank" rel="noopener">隐私政策</a> |
+      <a href="https://docs.nightcord.de5.net/legal/complete/terms-sekai-pass" target="_blank" rel="noopener">用户服务协议</a>
+    </footer>
   `;
 
   document.getElementById('back-btn').addEventListener('click', () => navigate('/'));
   document.getElementById('new-app-btn').addEventListener('click', () => showForm(null));
+
+  app.querySelectorAll('a[data-link]').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      navigate(link.getAttribute('href'));
+    });
+  });
 
   await loadApps();
 
@@ -98,29 +118,29 @@ export async function renderApps(app, api, navigate) {
     const method = AUTH_METHOD_LABELS[a.token_endpoint_auth_method] || a.token_endpoint_auth_method;
 
     return `
-      <div class="app-card">
-        <div class="app-card-header">
-          <h3>${escapeHtml(a.name)}</h3>
-          <span class="app-badge">${escapeHtml(method)}</span>
-        </div>
-        ${a.description ? `<p class="app-desc">${escapeHtml(a.description)}</p>` : ''}
-        <dl class="app-meta">
+      <article class="op-app" data-client-id="${escapeHtml(a.client_id)}">
+        <header class="op-app__head">
+          <h2 class="op-app__name">${escapeHtml(a.name)}</h2>
+          <span class="op-app__badge">${escapeHtml(method)}</span>
+        </header>
+        ${a.description ? `<p class="op-app__desc">${escapeHtml(a.description)}</p>` : ''}
+        <dl class="op-app__meta">
           <dt>Client ID</dt>
           <dd><code>${escapeHtml(a.client_id)}</code></dd>
           <dt>回调地址</dt>
           <dd><ul class="uri-list">${uris}</ul></dd>
           ${a.homepage_url ? `<dt>主页</dt><dd><code>${escapeHtml(a.homepage_url)}</code></dd>` : ''}
         </dl>
-        <div class="app-card-actions">
-          <button data-action="edit" data-client-id="${escapeHtml(a.client_id)}">编辑</button>
+        <div class="op-app__actions">
+          <button data-action="edit" data-client-id="${escapeHtml(a.client_id)}" class="btn-auto">编辑</button>
           ${
             a.token_endpoint_auth_method === 'private_key_jwt'
-              ? `<button data-action="keys" data-client-id="${escapeHtml(a.client_id)}">管理公钥</button>`
+              ? `<button data-action="keys" data-client-id="${escapeHtml(a.client_id)}" class="btn-auto">管理公钥</button>`
               : ''
           }
-          <button data-action="delete" data-client-id="${escapeHtml(a.client_id)}" class="btn-danger">删除</button>
+          <button data-action="delete" data-client-id="${escapeHtml(a.client_id)}" class="btn-danger btn-auto">删除</button>
         </div>
-      </div>
+      </article>
     `;
   }
 

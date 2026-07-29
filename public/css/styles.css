@@ -221,8 +221,8 @@ button:disabled {
 
 .error {
   background: rgba(var(--error-color) / 0.1);
-  border-left: 3px solid var(--error-color);
-  color: var(--error-color);
+  border-left: 3px solid rgb(var(--error-color));
+  color: rgb(var(--error-color));
   padding: 12px 16px;
   margin-bottom: 24px;
   font-size: 13px;
@@ -231,8 +231,8 @@ button:disabled {
 
 .success {
   background: rgba(var(--success-color) / 0.1);
-  border-left: 3px solid var(--success-color);
-  color: var(--success-color);
+  border-left: 3px solid rgb(var(--success-color));
+  color: rgb(var(--success-color));
   padding: 12px 16px;
   margin-bottom: 24px;
   font-size: 13px;
@@ -371,23 +371,6 @@ button:disabled {
     text-align: left;
   }
 
-  .connection-visual {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin: 10px 0 30px;
-    position: relative;
-    padding: 0 10px;
-  }
-  
-  .entity {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-    z-index: 2;
-  }
-  
   .entity-avatar {
     width: 64px;
     height: 64px;
@@ -401,7 +384,6 @@ button:disabled {
     font-weight: 700;
     color: var(--text-main);
     box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-    margin-bottom: 10px;
     position: relative;
   }
   
@@ -417,70 +399,6 @@ button:disabled {
     border-color: rgba(164, 140, 214, 0.3);
   }
   
-  .entity-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--text-muted);
-    font-family: var(--code-font);
-    font-weight: 600;
-  }
-
-  .connection-line {
-    flex: 1;
-    height: 1px;
-    background: #2a2a30;
-    margin: 0 16px -22px; /* Offset to align with avatars visual center vertically */
-    position: relative;
-    overflow: visible;
-  }
-  
-  /* Animated data flow dots */
-  .connection-line::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background: linear-gradient(90deg, 
-      transparent 0%, 
-      transparent 30%, 
-      var(--primary-color) 50%, 
-      transparent 70%, 
-      transparent 100%
-    );
-    background-size: 200% 100%;
-    animation: dataFlow 2s infinite linear;
-    opacity: 0.6;
-    border-radius: 2px;
-  }
-  
-  @keyframes dataFlow {
-    0% { background-position: 100% 0; }
-    100% { background-position: -100% 0; }
-  }
-  
-  .connection-icon {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: 24px;
-    height: 24px;
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    font-size: 12px;
-    z-index: 3;
-    box-shadow: 0 0 10px var(--card-bg);
-  }
-
   .auth-title-large {
     font-size: 18px;
     font-weight: 600;
@@ -941,41 +859,6 @@ input[type="url"]:valid:not(:placeholder-shown) {
     padding: 24px;
   }
 
-  .connection-visual {
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  .connection-line {
-    width: 1px;
-    height: 40px;
-    margin: 0;
-  }
-
-  .connection-line::before {
-    width: 3px;
-    height: 100%;
-    background: linear-gradient(180deg,
-      transparent 0%,
-      transparent 30%,
-      var(--primary-color) 50%,
-      transparent 70%,
-      transparent 100%
-    );
-    background-size: 100% 200%;
-    animation: dataFlowVertical 2s infinite linear;
-  }
-
-  @keyframes dataFlowVertical {
-    0% { background-position: 0 100%; }
-    100% { background-position: 0 -100%; }
-  }
-
-  .connection-icon {
-    left: 50%;
-    top: 50%;
-  }
-
   .authorize-actions {
     grid-template-columns: 1fr;
   }
@@ -1075,23 +958,86 @@ input[type="url"]:valid:not(:placeholder-shown) {
 }
 
 /* ═══════════════════════════════════════════════════════════
- *  开放平台 —— OAuth 应用自助管理
+ *  开放平台 —— 独立页面（不与仪表板 user-info 卡片共享布局）
  * ═══════════════════════════════════════════════════════════ */
 
-.page-header {
-  margin-bottom: 1.5rem;
-  text-align: center;
+.dashboard-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
 }
 
-.page-header h2 {
-  margin: 0 0 0.25rem;
+.open-platform {
+  max-width: 720px;
+}
+
+.open-platform-brand {
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.open-platform-home {
+  display: inline-block;
+  line-height: 0;
+  opacity: 0.92;
+  transition: opacity 0.2s;
+}
+
+.open-platform-home:hover {
+  opacity: 1;
+}
+
+.open-platform-home img {
+  display: block;
+  width: 180px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.open-platform-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.open-platform-kicker {
+  margin: 0 0 0.35rem;
+  font-family: var(--code-font);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+.open-platform-header h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.55rem;
+  font-weight: 650;
   color: var(--text-main);
+  letter-spacing: -0.02em;
 }
 
 .page-subtitle {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+.open-platform-toolbar {
+  margin: 0 0 1.1rem;
+  justify-content: flex-start;
+}
+
+.open-platform-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.open-platform-panel:empty {
+  display: none;
 }
 
 .loading-text,
@@ -1104,21 +1050,23 @@ input[type="url"]:valid:not(:placeholder-shown) {
   text-align: center;
   border: 1px dashed var(--border-color);
   border-radius: var(--sekai-radius-md);
+  background: transparent;
 }
 
 .empty-state p {
   margin: 0.35rem 0;
 }
 
-.app-card {
-  background: var(--card-bg);
+/* 应用条目：列表行，不是仪表板那种居中资料卡 */
+.op-app {
+  background: rgb(var(--sekai-surface-raised, var(--sekai-surface)));
   border: 1px solid var(--border-color);
+  border-left: 3px solid rgb(var(--sekai-accent) / 0.55);
   border-radius: var(--sekai-radius-md);
   padding: 1rem 1.15rem;
-  margin-bottom: 1rem;
 }
 
-.app-card-header {
+.op-app__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1126,31 +1074,35 @@ input[type="url"]:valid:not(:placeholder-shown) {
   flex-wrap: wrap;
 }
 
-.app-card-header h3 {
+.op-app__name {
   margin: 0;
   font-size: 1.05rem;
+  font-weight: 600;
   color: var(--text-main);
-  /* 应用名是用户输入，防止超长名字撑破卡片 */
   overflow-wrap: anywhere;
 }
 
+.op-app__badge,
 .app-badge {
   flex: none;
   padding: 2px 9px;
   border-radius: 10px;
   font-size: 0.72rem;
+  font-family: var(--code-font);
+  letter-spacing: 0.04em;
   color: var(--text-muted);
   background: rgb(var(--bg-white) / 0.05);
   border: 1px solid var(--border-color);
 }
 
-.app-desc {
+.op-app__desc {
   margin: 0.5rem 0 0;
   font-size: 0.88rem;
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
 
+.op-app__meta,
 .app-meta {
   margin: 0.85rem 0 0;
   display: grid;
@@ -1159,20 +1111,26 @@ input[type="url"]:valid:not(:placeholder-shown) {
   font-size: 0.85rem;
 }
 
+.op-app__meta dt,
 .app-meta dt {
   color: var(--text-muted);
   white-space: nowrap;
+  font-family: var(--code-font);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
+.op-app__meta dd,
 .app-meta dd {
   margin: 0;
   min-width: 0;
 }
 
+.op-app__meta code,
 .app-meta code {
   font-family: var(--code-font);
   font-size: 0.8rem;
-  /* 回调地址可能很长，必须能断行而不是横向撑破 */
   overflow-wrap: anywhere;
 }
 
@@ -1185,7 +1143,7 @@ input[type="url"]:valid:not(:placeholder-shown) {
   margin-bottom: 0.15rem;
 }
 
-.app-card-actions,
+.op-app__actions,
 .apps-actions,
 .form-actions {
   display: flex;
@@ -1194,7 +1152,7 @@ input[type="url"]:valid:not(:placeholder-shown) {
   margin-top: 1rem;
 }
 
-.app-card-actions button,
+.op-app__actions button,
 .apps-actions button,
 .form-actions button {
   width: auto;
@@ -1412,18 +1370,27 @@ input[type="url"]:valid:not(:placeholder-shown) {
 }
 
 @media (max-width: 480px) {
+  .op-app__meta,
   .app-meta {
     grid-template-columns: 1fr;
     gap: 0.15rem;
   }
 
-  .app-card-actions button,
+  .op-app__actions button,
   .apps-actions button,
   .form-actions button {
     flex: 1 1 auto;
   }
 
   .key-row-actions button {
+    flex: 1 1 auto;
+  }
+
+  .dashboard-actions {
+    justify-content: stretch;
+  }
+
+  .dashboard-actions button {
     flex: 1 1 auto;
   }
 }

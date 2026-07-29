@@ -180,10 +180,11 @@ describe('文档里不再教人进库里手工注册应用', () => {
   }
 
   test('开放平台的入口确实存在（不能只是文档这么写）', () => {
-    // 文档说「仪表板点开放平台」，那就得真有这么个按钮和这么条路由
+    // 入口在仪表板页脚链接（不是顶部按钮），路由必须挂好
     const dashboard = readFileSync(join(root, 'public/js/pages/dashboard.js'), 'utf8');
     const app = readFileSync(join(root, 'public/js/app.js'), 'utf8');
-    assert.match(dashboard, /navigate\('\/apps'\)/, '仪表板上没有通往 /apps 的入口');
+    assert.match(dashboard, /href="\/apps"/, '仪表板页脚没有通往 /apps 的链接');
+    assert.doesNotMatch(dashboard, /id="apps-btn"/, '开放平台入口不应再是顶部按钮');
     assert.match(app, /'\/apps':/, '路由表里没有 /apps');
   });
 });

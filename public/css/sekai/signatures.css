@@ -1,0 +1,409 @@
+/* @sekai-vendor @sekai/design@v0.1.0 css/signatures.css */
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
+
+/* ============================================================
+   SEKAI Design System — Signature devices
+   ------------------------------------------------------------
+   Ten small mechanisms lifted out of nightcord and sekai-pass.
+   Individually they are a few lines of CSS; collectively they are
+   what makes a surface read as SEKAI rather than as generic dark
+   mode. Reach for one of these before inventing decoration.
+
+   They are composable utilities — put them ON a component, don't
+   fork the component to get them.
+
+   Two of them are pure wayfinding and share a rule (DESIGN_SYSTEM.md
+   §0 principle 3): a 90deg gradient runs along the reading axis and
+   POINTS — cap, sheen, flow. Any other angle describes which way a
+   surface faces and how it catches the light — glass at 100deg, the
+   entity avatar at 135deg. Before adding a gradient, answer which of
+   the two it is; the angle follows from the answer, not from taste.
+   ============================================================ */
+
+/* --- 1. Cap -------------------------------------------------
+   A 3px accent gradient sealing the top edge of a panel. From the
+   Pass container. Use once per screen, on the primary panel; a
+   second cap on the same screen kills the first one's authority. */
+.sekai-cap {
+  position: relative;
+  overflow: hidden;
+}
+
+.sekai-cap::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--sekai-accent-deep)),
+    rgb(var(--sekai-accent)),
+    rgb(var(--sekai-accent-deep))
+  );
+}
+
+/* --- 2. Grid ------------------------------------------------
+   40px graph-paper field at 3% white. From the Pass body. This is
+   the world-system page background; it reads as "instrument panel"
+   and should stay under content, never inside a card. */
+.sekai-grid {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* --- 3. Signature -------------------------------------------
+   The mono voice at its smallest: uppercase, widely tracked, dim.
+   `SEKAI PASS // SYSTEM`, `EDITABLE DATA`, `STEREO`, entity labels.
+   This single class carries most of the family resemblance between
+   the two designs — see DESIGN_SYSTEM.md §2. */
+.sekai-sig {
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-micro);
+  font-weight: var(--sekai-weight-semibold);
+  letter-spacing: var(--sekai-tracking-widest);
+  text-transform: uppercase;
+  color: rgb(var(--sekai-fg-muted));
+  opacity: 0.6;
+}
+
+.sekai-sig--loud {
+  opacity: 1;
+  color: rgb(var(--sekai-accent));
+}
+
+/* A slightly larger sibling for form labels and column headers. */
+.sekai-label {
+  display: block;
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-label);
+  letter-spacing: var(--sekai-tracking-wide);
+  text-transform: uppercase;
+  color: rgb(var(--sekai-fg-muted));
+}
+
+/* --- 4. Rule ------------------------------------------------
+   A hairline divider, optionally interrupted by a mono label. Set
+   --sekai-rule-bg to whatever the rule sits on so the label knocks
+   the line out cleanly. */
+.sekai-rule {
+  --sekai-rule-bg: rgb(var(--sekai-surface));
+  height: 1px;
+  border: 0;
+  background: rgb(var(--sekai-divider) / var(--sekai-divider-a));
+  margin: var(--sekai-space-3xl) 0;
+  position: relative;
+}
+
+.sekai-rule[data-label]::after {
+  content: attr(data-label);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--sekai-rule-bg);
+  padding: 0 var(--sekai-space-md);
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-micro);
+  letter-spacing: var(--sekai-tracking-wide);
+  text-transform: uppercase;
+  color: rgb(var(--sekai-fg-muted));
+  white-space: nowrap;
+}
+
+/* --- 5. Strip -----------------------------------------------
+   A 3px bar down the left edge: a CHANGE BAR, the rule printed in a
+   technical manual's margin to mark a block you should be able to
+   find without reading. The colour says which kind.
+
+   Left specifically, and only left: the left gutter is the one column
+   the eye already returns to on every line, so scanning it is free.
+
+   Every marked block in the system uses it — quoted code, blockquotes,
+   replies, link cards, alerts, and the message that named you. Six
+   different meanings, one job: findable at a glance. */
+.sekai-strip {
+  border-left: 3px solid rgb(var(--sekai-accent-deep));
+  padding-left: var(--sekai-space-md);
+}
+
+.sekai-strip--accent {
+  border-left-color: rgb(var(--sekai-accent));
+}
+.sekai-strip--signal {
+  border-left-color: rgb(var(--sekai-signal));
+}
+.sekai-strip--danger {
+  border-left-color: rgb(var(--sekai-danger));
+}
+.sekai-strip--success {
+  border-left-color: rgb(var(--sekai-success));
+}
+
+/* --- 6. Glass -----------------------------------------------
+   A near-flat gradient of white-on-nothing plus a hairline and a
+   little blur. From the nightcord file card. It is what an
+   attachment looks like when it floats over a chat rather than
+   sitting in a panel. Keep the alphas low — this is glass, not
+   frosting. */
+.sekai-glass {
+  background: linear-gradient(
+    100deg,
+    rgb(255 255 255 / 0.06),
+    rgb(255 255 255 / 0.02)
+  );
+  border: var(--sekai-hairline);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.sekai-glass:hover {
+  background: linear-gradient(
+    100deg,
+    rgb(255 255 255 / 0.1),
+    rgb(255 255 255 / 0.04)
+  );
+}
+
+/* Heavier variant for overlays that must stay readable over anything
+   (toasts, floating menus). From the nightcord update toast. */
+.sekai-glass--overlay {
+  background: rgb(var(--sekai-surface-raised) / 0.85);
+  border: 1px solid rgb(255 255 255 / 0.15);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 10px 40px rgb(0 0 0 / 0.5);
+}
+
+/* --- 7. Lift ------------------------------------------------
+   THE hover gesture of this system: brighten the hairline, rise one
+   pixel, settle back on press. Nothing scales up, nothing glows on
+   hover alone. Apply to any card or button that is clickable. */
+.sekai-lift {
+  transition:
+    transform var(--sekai-dur) var(--sekai-ease-out),
+    border-color var(--sekai-dur) var(--sekai-ease-out),
+    background var(--sekai-dur) var(--sekai-ease-out),
+    box-shadow var(--sekai-dur) var(--sekai-ease-out);
+}
+
+.sekai-lift:hover {
+  transform: var(--sekai-lift);
+  border-color: rgb(var(--sekai-line-strong) / var(--sekai-line-strong-a));
+}
+
+.sekai-lift:active {
+  transform: translateY(0);
+}
+
+/* --- 8. Sheen -----------------------------------------------
+   A single diagonal highlight sweeping across on hover. From the
+   nightcord "Sign in with SEKAI Pass" button. Reserve it for ONE
+   element per screen — the primary identity action. It stops being
+   special the moment two of them run. */
+.sekai-sheen {
+  position: relative;
+  overflow: hidden;
+}
+
+.sekai-sheen::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.1),
+    transparent
+  );
+  transform: skewX(-20deg);
+  transition: left 0.5s;
+  pointer-events: none;
+}
+
+.sekai-sheen:hover::after {
+  left: 150%;
+  transition: left 0.7s ease-in-out;
+}
+
+/* --- 9. LED -------------------------------------------------
+   A 6px status lamp that actually glows when lit. From the walkman
+   transport. The ONLY place --sekai-signal is allowed to appear as
+   a fill, alongside transport keys and AI mentions. */
+.sekai-led {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--sekai-radius-full);
+  background: rgb(var(--sekai-device-line));
+  flex-shrink: 0;
+  transition: background var(--sekai-dur), box-shadow var(--sekai-dur);
+}
+
+/* `.active` is nightcord's own state class and the SEKAI renderer
+   already emits it; `.is-active` is the spelling for new code. Both
+   are supported everywhere a state class appears in this system. */
+.sekai-led.is-active,
+.sekai-led.active {
+  background: rgb(var(--sekai-signal));
+  box-shadow: 0 0 4px rgb(var(--sekai-signal));
+}
+
+.sekai-led--accent.is-active,
+.sekai-led--accent.active {
+  background: rgb(var(--sekai-accent));
+  box-shadow: 0 0 4px rgb(var(--sekai-accent));
+}
+.sekai-led--success.is-active,
+.sekai-led--success.active {
+  background: rgb(var(--sekai-success));
+  box-shadow: 0 0 4px rgb(var(--sekai-success));
+}
+
+/* --- 10. Flow -----------------------------------------------
+   A hairline with a packet of accent travelling along it. From the
+   Pass authorize screen's user <-> app connection. Use it to depict
+   a relationship between two entities, never as ambient decoration. */
+.sekai-flow {
+  flex: 1;
+  height: 1px;
+  background: rgb(var(--sekai-divider) / var(--sekai-divider-a));
+  position: relative;
+  overflow: visible;
+}
+
+.sekai-flow::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  opacity: 0.6;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 30%,
+    rgb(var(--sekai-accent)) 50%,
+    transparent 70%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: sekai-flow-x 2s infinite linear;
+}
+
+.sekai-flow--vertical {
+  flex: none;
+  width: 1px;
+  height: 40px;
+}
+
+.sekai-flow--vertical::before {
+  width: 3px;
+  height: 100%;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 30%,
+    rgb(var(--sekai-accent)) 50%,
+    transparent 70%,
+    transparent 100%
+  );
+  background-size: 100% 200%;
+  animation: sekai-flow-y 2s infinite linear;
+}
+
+@keyframes sekai-flow-x {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes sekai-flow-y {
+  0% {
+    background-position: 0 100%;
+  }
+  100% {
+    background-position: 0 -100%;
+  }
+}
+
+/* --- Shared keyframes used across components ---------------- */
+@keyframes sekai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sekai-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sekai-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sekai-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sekai-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes sekai-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes sekai-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}

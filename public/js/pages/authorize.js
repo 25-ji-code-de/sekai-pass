@@ -12,7 +12,16 @@ export async function renderAuthorize(app, api, navigate) {
   api.setAuthToken(token);
 
   const params = getQueryParams();
-  const { client_id, redirect_uri, response_type, code_challenge, code_challenge_method, state } = params;
+  const {
+    client_id,
+    redirect_uri,
+    response_type,
+    code_challenge,
+    code_challenge_method,
+    state,
+    scope,
+    nonce
+  } = params;
 
   if (!client_id || !redirect_uri || response_type !== 'code') {
     showError('Invalid request parameters');
@@ -111,25 +120,25 @@ export async function renderAuthorize(app, api, navigate) {
     authContent.innerHTML = `
       <div class="auth-flow-container">
         
-        <div class="connection-visual">
-           <div class="entity user">
-             <div class="entity-avatar" style="background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%);">
+        <div class="connection-visual sekai-connection">
+           <div class="entity sekai-entity user">
+             <div class="entity-avatar sekai-entity__avatar" style="background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%);">
                ${escapeHtml(userInitial)}
              </div>
-             <div class="entity-label">YOU</div>
+             <div class="entity-label sekai-entity__label">YOU</div>
            </div>
            
-           <div class="connection-line">
-              <div class="connection-icon">
+           <div class="connection-line sekai-flow">
+              <div class="connection-icon sekai-connection__badge">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
               </div>
            </div>
 
-           <div class="entity app">
-             <div class="entity-avatar">
+           <div class="entity sekai-entity app">
+             <div class="entity-avatar sekai-entity__avatar">
                ${escapeHtml(initial)}
              </div>
-             <div class="entity-label">APP</div>
+             <div class="entity-label sekai-entity__label">APP</div>
            </div>
         </div>
 
@@ -173,6 +182,8 @@ export async function renderAuthorize(app, api, navigate) {
           code_challenge,
           code_challenge_method,
           state,
+          scope,
+          nonce,
           action: 'allow'
         }, {
           headers: api.getAuthHeaders()

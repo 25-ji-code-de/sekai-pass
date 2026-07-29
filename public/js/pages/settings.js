@@ -41,7 +41,7 @@ export async function renderSettings(app, api, navigate) {
               <span class="label">EMAIL:</span> <span class="value" id="disp-email">...</span>
            </div>
            <div class="meta-row">
-              <span class="label">STATUS:</span> <span class="value" style="color: var(--success-color);">ACTIVE</span>
+              <span class="label">STATUS:</span> <span class="value" style="color: rgb(var(--success-color));">ACTIVE</span>
            </div>
            <div class="meta-row bio-row" id="disp-bio-row" style="display: none;">
               <span class="label">BIO:</span> <span class="value" id="disp-bio"></span>

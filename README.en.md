@@ -117,8 +117,9 @@ npm run deploy
 
 ### Register your application using OAuth 
 
-Log in, then click **开放平台** on the dashboard (or go to `/apps` directly) to create,
-edit and delete your own applications. No database access required.
+Log in, then open **开放平台** from the dashboard footer link (or go to `/apps`
+directly) to create, edit and delete your own applications. The open platform is
+a dedicated page, not shared with the dashboard card layout. No database access required.
 
 There is also an API:
 

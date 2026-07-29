@@ -23,6 +23,7 @@ import { decryptPassword, validateRequest } from "./decrypt.ts";
 import { verifyTurnstileDetailed } from "./turnstile.ts";
 import { createChallengeState, generatePoWChallenge, verifyPoWHash, POW_DIFFICULTY, POW_DIFFICULTY_STRICT, type ChallengeState } from "./pow.ts";
 import { validateScopeParameter, formatScopes } from "./scope.ts";
+import { isOIDCRequest } from "./oidc-scope.ts";
 import {
   listApplications,
   getApplication,
@@ -170,6 +171,7 @@ type AuthorizeValidation =
       method: string;
       state: string | null;
       scope: string;
+      nonce: string | null;
     };
 
 function validateAuthorizeRequest(
@@ -219,7 +221,8 @@ function validateAuthorizeRequest(
     code_challenge,
     method,
     state: state || null,
-    scope: formatScopes(scopeValidation.scopes)
+    scope: formatScopes(scopeValidation.scopes),
+    nonce: body.nonce || null
   };
 }
 
@@ -682,7 +685,7 @@ apiRouter.post("/oauth/authorize", async (c) => {
       return c.json({ error: validated.error }, validated.status);
     }
 
-    const { client_id, redirect_uri, code_challenge, method, state, scope } = validated;
+    const { client_id, redirect_uri, code_challenge, method, state, scope, nonce } = validated;
     const code = generateId(32);
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
     const createdAt = Date.now();
@@ -690,6 +693,20 @@ apiRouter.post("/oauth/authorize", async (c) => {
     await c.env.DB.prepare(
       "INSERT INTO auth_codes (code, user_id, client_id, redirect_uri, expires_at, created_at, code_challenge, code_challenge_method, state, scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(code, user.id, client_id, redirect_uri, expiresAt, createdAt, code_challenge, method, state, scope).run();
+
+    if (isOIDCRequest(scope)) {
+      await c.env.DB.prepare(
+        "INSERT INTO oidc_auth_data (code, nonce, auth_time) VALUES (?, ?, ?)"
+      ).bind(code, nonce, createdAt).run();
+
+      try {
+        await c.env.DB.prepare(
+          "UPDATE users SET last_auth_time = ? WHERE id = ?"
+        ).bind(createdAt, user.id).run();
+      } catch {
+        // Backward-compatible with databases created before last_auth_time.
+      }
+    }
 
     // OAuth 2.1: Include issuer parameter to prevent mix-up attacks
     const issuer = new URL(c.req.url).origin;

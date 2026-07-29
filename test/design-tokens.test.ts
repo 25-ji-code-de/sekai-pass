@@ -74,17 +74,14 @@ describe('vendored 的 token 文件', () => {
   });
 
   for (const name of LAYERS) {
-    test(`${name}.css 记了上游 commit 与来源文件`, () => {
+    test(`${name}.css 记了不可变 tag 与来源文件`, () => {
       // 只看文件头，失败时不把整份 CSS 打进日志
-      const header = layer[name].slice(0, 800);
-      assert.ok(
-        new RegExp(`tokens/${name}\\.css\\s*@\\s*[0-9a-f]{7,}`).test(header),
-        '头部没写清楚对应哪个上游文件、哪个 commit',
+      const header = layer[name].slice(0, 200);
+      assert.match(
+        header,
+        new RegExp(`^/\\* @sekai-vendor @sekai/design@v0\\.1\\.0 tokens/${name}\\.css \\*/`),
+        '文件头必须是可由 static-check 验证的 vendor 标记',
       );
-      // 上游正在开发，工作区随时和任何一个 commit 都对不上；
-      // 标了 commit 却抄工作区，这行出处比没有还坏
-      assert.match(header, /提交树/, '没说明取自提交树而非工作区');
-      assert.match(header, /不要在这里改任何值/);
     });
   }
 
@@ -339,10 +336,10 @@ describe('圆角走 token', () => {
   const KEEP = new Map([
     ['50%', '圆形是形状声明，不是尺寸档位（4 处：loading / connection-icon / avatar-preview / pow-spinner）'],
     ['2px', '没有对应档位（连接线与上传进度条的端头）'],
-    // .app-badge。上游 sekai-design 的 .sekai-badge--pill 就是
+    // .op-app__badge / .app-badge。上游 sekai-design 的 .sekai-badge--pill 就是
     // `padding: 2px 9px; border-radius: 10px`，逐字相同，且上游自己也没有
     // 把这个 10px 换成 token。跟着上游走，而不是自作主张换成 radius-full。
-    ['10px', '与上游 .sekai-badge--pill 逐字对齐（卡片头部的药丸徽章）'],
+    ['10px', '与上游 .sekai-badge--pill 逐字对齐（开放平台条目的药丸徽章）'],
   ]);
 
   test('没有新的硬编码圆角', () => {

@@ -44,12 +44,12 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "lucia": "^3.2.0",
-    "hono": "^4.0.0"
+    "hono": "^4.0.0",
+    "lucia": "^3.2.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240208.0",
-    "wrangler": "^3.28.0",
-    "typescript": "^5.3.3"
+    "@cloudflare/workers-types": "^5.20260729.1",
+    "typescript": "^5.3.3",
+    "wrangler": "^4.115.0"
   }
 }

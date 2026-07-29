@@ -40,7 +40,7 @@ export function escapeHtml(value: unknown): string {
  */
 export function renderPage(title: string, content: string): string {
   return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="world-system">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">

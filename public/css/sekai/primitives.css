@@ -1,21 +1,6 @@
+/* @sekai-vendor @sekai/design@v0.1.0 tokens/primitives.css */
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
-
-/* VENDORED —— sekai-design tokens/primitives.css @ cbbb0ec
- *
- * 与上游逐字相同（除本注释）。内容取自**提交树**
- * （git show cbbb0ec:tokens/primitives.css），不是工作区 —— 上游正在开发，
- * 工作区随时和任何一个 commit 都对不上，标了 commit 就得名副其实。
- *
- * **不要在这里改任何值。** 要改就改 sekai-design，再整体同步过来。
- * 一份设计系统被各仓各改一点，就退化成了各仓各有一份 ——
- * 这正是本生态在 auth 客户端上已经踩过的坑（五份漂移的实现）。
- *
- * 四个文件分开放，是为了让每一个都能和上游的同名文件逐字比对：
- * 等 sekai-design 推上 GitHub 打了 tag，就能给每个文件加
- * @sekai-vendor 标记，接进 .github 的每日漂移检查。
- * 拼成一个文件的话那个比对做不了。
- */
 
 /* ============================================================
    SEKAI Design System — Layer 0: Primitives
@@ -27,10 +12,10 @@
 
 :root {
   /* ---------- Type families ----------
-     sans  = content voice
-     mono  = MACHINE VOICE. Labels, IDs, sizes, timecodes, status,
-             code. This split is the single strongest signature of
-             both source designs — see DESIGN_SYSTEM.md §2.        */
+     sans  = content on a screen
+     mono  = silkscreen on a chassis. Labels, IDs, sizes, timecodes,
+             status, code. This split is the single strongest signature
+             of both source designs — see DESIGN_SYSTEM.md §3.        */
   --sekai-font-sans:
     "Inter", "Noto Sans JP", "Segoe UI", system-ui, -apple-system, sans-serif;
   --sekai-font-mono:
@@ -59,8 +44,8 @@
   --sekai-leading: 1.5;
   --sekai-leading-relaxed: 1.6;
 
-  /* Tracking is how the mono voice reads as "machine". Never apply
-     wide tracking to sans body copy. */
+  /* Tracking is how mono reads as silkscreen. Never apply wide
+     tracking to sans body copy. */
   --sekai-tracking-tight: -0.01em;
   --sekai-tracking-none: 0;
   --sekai-tracking-wide: 0.5px;
@@ -89,8 +74,19 @@
   --sekai-radius-full: 9999px;
 
   /* ---------- Elevation ----------
-     Surfaces are flat. Depth comes from shadow, never from a heavy
-     gradient. See DESIGN_SYSTEM.md §4. */
+     NOT an abstract importance scale. The system models one lit
+     scene with a fixed source above and to the left (DESIGN_SYSTEM.md
+     §0 principle 1), and a shadow answers a physical question:
+     how big is this object, and how far off its backing plane?
+
+     So pick by SIZE, not by importance. A 32px chip has almost no
+     area to cast with and needs a tight, dark shadow to read as
+     detached at all; a full panel needs a wide, soft one. Two
+     elements of equal importance and different size take different
+     shadows — that is correct, not an inconsistency.
+
+     Hand-tuned off-ladder values are legitimate and are listed with
+     their reasons in DESIGN_SYSTEM.md §4. */
   --sekai-elev-0: none;
   --sekai-elev-1: 0 2px 4px rgb(0 0 0 / 0.2);
   --sekai-elev-2: 0 4px 12px rgb(0 0 0 / 0.2);

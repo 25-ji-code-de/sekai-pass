@@ -12,7 +12,16 @@ export async function renderAuthorize(app, api, navigate) {
   api.setAuthToken(token);
 
   const params = getQueryParams();
-  const { client_id, redirect_uri, response_type, code_challenge, code_challenge_method, state } = params;
+  const {
+    client_id,
+    redirect_uri,
+    response_type,
+    code_challenge,
+    code_challenge_method,
+    state,
+    scope,
+    nonce
+  } = params;
 
   if (!client_id || !redirect_uri || response_type !== 'code') {
     showError('Invalid request parameters');
@@ -173,6 +182,8 @@ export async function renderAuthorize(app, api, navigate) {
           code_challenge,
           code_challenge_method,
           state,
+          scope,
+          nonce,
           action: 'allow'
         }, {
           headers: api.getAuthHeaders()

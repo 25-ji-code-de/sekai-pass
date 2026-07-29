@@ -74,17 +74,14 @@ describe('vendored 的 token 文件', () => {
   });
 
   for (const name of LAYERS) {
-    test(`${name}.css 记了上游 commit 与来源文件`, () => {
+    test(`${name}.css 记了不可变 tag 与来源文件`, () => {
       // 只看文件头，失败时不把整份 CSS 打进日志
-      const header = layer[name].slice(0, 800);
-      assert.ok(
-        new RegExp(`tokens/${name}\\.css\\s*@\\s*[0-9a-f]{7,}`).test(header),
-        '头部没写清楚对应哪个上游文件、哪个 commit',
+      const header = layer[name].slice(0, 200);
+      assert.match(
+        header,
+        new RegExp(`^/\\* @sekai-vendor @sekai/design@v0\\.1\\.0 tokens/${name}\\.css \\*/`),
+        '文件头必须是可由 static-check 验证的 vendor 标记',
       );
-      // 上游正在开发，工作区随时和任何一个 commit 都对不上；
-      // 标了 commit 却抄工作区，这行出处比没有还坏
-      assert.match(header, /提交树/, '没说明取自提交树而非工作区');
-      assert.match(header, /不要在这里改任何值/);
     });
   }
 

@@ -1,21 +1,6 @@
+/* @sekai-vendor @sekai/design@v0.1.0 tokens/world-night.css */
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
-
-/* VENDORED —— sekai-design tokens/world-night.css @ cbbb0ec
- *
- * 与上游逐字相同（除本注释）。内容取自**提交树**
- * （git show cbbb0ec:tokens/world-night.css），不是工作区 —— 上游正在开发，
- * 工作区随时和任何一个 commit 都对不上，标了 commit 就得名副其实。
- *
- * **不要在这里改任何值。** 要改就改 sekai-design，再整体同步过来。
- * 一份设计系统被各仓各改一点，就退化成了各仓各有一份 ——
- * 这正是本生态在 auth 客户端上已经踩过的坑（五份漂移的实现）。
- *
- * 四个文件分开放，是为了让每一个都能和上游的同名文件逐字比对：
- * 等 sekai-design 推上 GitHub 打了 tag，就能给每个文件加
- * @sekai-vendor 标记，接进 .github 的每日漂移检查。
- * 拼成一个文件的话那个比对做不了。
- */
 
 /* ============================================================
    World: NIGHT  —  derived from nightcord
@@ -58,6 +43,10 @@
   --sekai-accent-hover: 196 181 253; /* #c4b5fd */
   --sekai-accent-deep: 124 111 172; /* #7c6fac */
   --sekai-accent-fill: 124 111 172; /* fills use the deeper one */
+
+  /* Player micro-ramp — nightcord's own hand-tuned pair. */
+  --sekai-surface-card: 47 39 63; /* #2f273f */
+  --sekai-surface-card-live: 53 46 70; /* #352e46 */
 
   /* Scrim */
   --sekai-scrim: 20 20 25;

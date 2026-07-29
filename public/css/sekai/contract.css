@@ -1,21 +1,6 @@
+/* @sekai-vendor @sekai/design@v0.1.0 tokens/contract.css */
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
-
-/* VENDORED —— sekai-design tokens/contract.css @ cbbb0ec
- *
- * 与上游逐字相同（除本注释）。内容取自**提交树**
- * （git show cbbb0ec:tokens/contract.css），不是工作区 —— 上游正在开发，
- * 工作区随时和任何一个 commit 都对不上，标了 commit 就得名副其实。
- *
- * **不要在这里改任何值。** 要改就改 sekai-design，再整体同步过来。
- * 一份设计系统被各仓各改一点，就退化成了各仓各有一份 ——
- * 这正是本生态在 auth 客户端上已经踩过的坑（五份漂移的实现）。
- *
- * 四个文件分开放，是为了让每一个都能和上游的同名文件逐字比对：
- * 等 sekai-design 推上 GitHub 打了 tag，就能给每个文件加
- * @sekai-vendor 标记，接进 .github 的每日漂移检查。
- * 拼成一个文件的话那个比对做不了。
- */
 
 /* ============================================================
    SEKAI Design System — Layer 1: The semantic contract
@@ -45,11 +30,38 @@
      .world-night to <html>/<body> overrides these wholesale. */
 
   /* ---------- Canvas ladder ----------
-     Defined by ROLE, not by lightness direction. world-system climbs
-     lighter as it rises (#0b0b0e -> #17171c -> #202025); world-night
-     climbs *darker* (#50476a -> #3f355b -> #2b2633). Both are internally
-     consistent, and both read as "raised" because elevation in this
-     system comes from shadow + hairline, not from fill lightness. */
+     One rule, both worlds: RELATIVE TO THE PLANE IT SITS ON, raised
+     catches more light and is lighter; recessed catches less and is
+     darker. See DESIGN_SYSTEM.md §0 principle 2.
+
+       world-night   #50476a canvas (the desk)
+                     #3f355b sidebar — a trough cut into it
+                     #50476a .channel — a chip lying in that trough
+                     #2b2633 attachment — a deeper well
+       world-system  #0b0b0e canvas (an instrument face, dark room)
+                     #17171c panel mounted on it, catching light
+                     #111114 input — a well cut into the panel
+
+     The two worlds differ in ambient level, not in direction.
+
+     ONLY DIFFERENCES ARE PHYSICAL. A plane has no absolute height,
+     the same way a position has no absolute potential energy. These
+     values are not elevations; they are one chosen frame. The SAME
+     value reads as raised or as recessed depending only on what is
+     under it — #2b2633 over the scrim is a modal floating up, and
+     over the #50476a canvas it is a well cut down. Both readings are
+     correct simultaneously.
+
+     Which is why the scrim is load-bearing: rgb(20 20 25 / .92)
+     crushes the canvas to near-black and thereby RESETS THE ZERO, so
+     the modal reads as raised without changing its own colour. Remove
+     the scrim and that same modal becomes a pit. The scrim is
+     structure, not atmosphere.
+
+     Note on names: `-raised` / `-sunken` bake a direction into the
+     name — an absolute claim that contradicts the paragraph above.
+     Values are right; read the names as "second / third plane from
+     the canvas", not as a direction. See DESIGN_SYSTEM.md §10.1. */
   --sekai-canvas: 11 11 14; /* page field */
   --sekai-surface: 23 23 28; /* default panel sitting on the canvas */
   --sekai-surface-raised: 32 32 37; /* a plane above --sekai-surface */
@@ -103,6 +115,52 @@
   --sekai-success: 129 199 132;
   --sekai-warning: 250 166 26;
   --sekai-info: 56 189 248;
+
+  /* ---------- Card surface ----------
+     The plane a small object sits on when it is lying ON the canvas
+     rather than cut into it: link cards, the audio player body.
+     nightcord names this `--sekai-bg-card` (#2f273f) and gives it a
+     second step for when the object is LIVE (#352e46).
+
+     It is a real plane, not a rung of the canvas ladder — snapping it
+     to the nearest rung flattens the two-step ramp, and because
+     --surface-hover is a neutral grey-violet it also sends the live
+     state toward "under the cursor" instead of "awake". */
+  --sekai-surface-card: 28 28 33;
+  --sekai-surface-card-live: 35 35 41;
+
+  /* ---------- Identity tints ----------
+     Eight colours for telling people apart, as a printed colour-coded
+     tag: a bright field with dark ink of the same hue. That is what a
+     cable marker or an equipment label looks like, and glancing across
+     a roster is exactly the job they do.
+
+     Deliberately NOT in the world files. A person has to stay the same
+     colour in nightcord, in hub and in Pass, or the colour stops being
+     an identity. These are the only palette tokens a world may not
+     re-point.
+
+     Generated, not picked: hue anchored on SEKAI's own 293°, eight
+     even 45° steps, one lightness so every one is equally legible.
+     Re-run scripts/derive-identity-tints.mjs to change or verify —
+     it also prints the contrast audit and the neighbour separation. */
+  --sekai-identity-1: 175 151 255; /* H 293° — the house hue */
+  --sekai-identity-2: 230 131 203; /* H 338° */
+  --sekai-identity-3: 251 129 125; /* H  23° */
+  --sekai-identity-4: 232 150 41; /* H  68° */
+  --sekai-identity-5: 172 180 46; /* H 113° */
+  --sekai-identity-6: 64 199 134; /* H 158° */
+  --sekai-identity-7: 0 197 212; /* H 203° */
+  --sekai-identity-8: 83 177 255; /* H 248° */
+
+  --sekai-identity-1-ink: 65 51 105;
+  --sekai-identity-2-ink: 90 40 77;
+  --sekai-identity-3-ink: 100 38 38;
+  --sekai-identity-4-ink: 93 51 0;
+  --sekai-identity-5-ink: 65 68 0;
+  --sekai-identity-6-ink: 0 79 46;
+  --sekai-identity-7-ink: 0 76 85;
+  --sekai-identity-8-ink: 13 66 108;
 
   /* ---------- Scrim ---------- */
   --sekai-scrim: 20 20 25;

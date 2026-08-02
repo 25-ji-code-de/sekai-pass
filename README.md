@@ -208,7 +208,7 @@ curl https://id.nightcord.de5.net/oauth/userinfo \
   "sub": "user-id",
   "preferred_username": "username",
   "name": "Display Name",
-  "picture": "https://storage.nightcord.de5.net/avatars/xxx.webp",
+  "picture": "https://r2.nightcord.de5.net/avatars/xxx.webp",
   "bio": "Hello, SEKAI",
   "email": "user@example.com",
   "email_verified": false

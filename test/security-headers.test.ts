@@ -134,13 +134,20 @@ describe('CSP —— Report-Only 的完整策略', () => {
   });
 
   test('放行头像所在的对象存储', () => {
+    const imgSrc = csp.split(';').find((d) => d.trim().startsWith('img-src')) ?? '';
     for (const host of [
       'https://assets.nightcord.de5.net',
-      'https://storage.nightcord.de5.net',
       'https://r2.nightcord.de5.net',
     ]) {
-      assert.ok(csp.includes(host), `img-src 缺少 ${host}`);
+      assert.ok(imgSrc.includes(host), `img-src 缺少 ${host}`);
     }
+    assert.ok(!imgSrc.includes('https://storage.nightcord.de5.net'));
+  });
+
+  test('放行头像 direct upload 网关', () => {
+    const connectSrc = csp.split(';').find((d) => d.trim().startsWith('connect-src')) ?? '';
+    assert.ok(connectSrc.includes('https://storage.nightcord.de5.net'));
+    assert.ok(connectSrc.includes('https://upload.nightcord.de5.net'));
   });
 
   test('指令名全部合法', () => {

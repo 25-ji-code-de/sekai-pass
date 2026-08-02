@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Lightweight client for Nightcord Storage v2 (storage.nightcord.de5.net).
- * Uploads via PUT /v2/upload and returns a public HTTPS URL (r2.*) for avatar use.
+ * Uploads via the preferred /v2/upload/init + direct gateway + /complete flow
+ * and returns a public HTTPS URL (r2.*) for avatar use.
  *
  * @see https://storage.nightcord.de5.net/?format=md
  */
@@ -40,55 +41,103 @@ export class FileUploadService {
    *   h?: number
    * }>}
    */
-  upload(file, filename, onProgress, opts = {}) {
+  async upload(file, filename, onProgress, opts = {}) {
     if (!file || !(file instanceof Blob)) {
-      return Promise.reject(new Error('Invalid file object'));
+      throw new Error('Invalid file object');
     }
 
     const name = filename || file.name || 'avatar';
     const kind = opts.kind || FileUploadService.inferKind(file.type);
 
+    return this.uploadDirect(file, name, onProgress, opts, kind);
+  }
+
+  async uploadDirect(file, name, onProgress, opts, kind) {
+    const init = await this.jsonPost('/v2/upload/init', {
+      name,
+      type: file.type || 'application/octet-stream',
+      size: file.size,
+      kind,
+      ...(opts.width != null ? { w: opts.width } : {}),
+      ...(opts.height != null ? { h: opts.height } : {})
+    });
+
+    const form = new FormData();
+    for (const [fieldName, value] of Object.entries(init.upload?.fields || {})) {
+      form.append(fieldName, value);
+    }
+    form.append('file', file, name);
+
+    await this.xhrUpload({
+      method: init.upload?.method || 'POST',
+      url: init.upload?.url,
+      body: form,
+      onProgress,
+      completeOnLoad: false
+    });
+
+    const raw = await this.jsonPost('/v2/upload/complete', { token: init.complete_token });
+    if (typeof onProgress === 'function') onProgress(100);
+    return this.normalizeResponse(raw);
+  }
+
+  async jsonPost(path, body) {
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = await this.responseError(res);
+      throw err;
+    }
+    return res.json();
+  }
+
+  async responseError(res) {
+    let message = `Upload failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // ignore
+    }
+    const err = new Error(message);
+    err.status = res.status;
+    return err;
+  }
+
+  xhrUpload({ method, url, body, onProgress, completeOnLoad = true }) {
     return new Promise((resolve, reject) => {
+      if (!url) {
+        reject(new Error('Upload URL missing'));
+        return;
+      }
       const xhr = new XMLHttpRequest();
 
       if (typeof onProgress === 'function') {
         xhr.upload.addEventListener('progress', (e) => {
           if (e.lengthComputable) {
-            onProgress(Math.round((e.loaded / e.total) * 100));
+            const cap = completeOnLoad ? 100 : 99;
+            onProgress(Math.min(cap, Math.round((e.loaded / e.total) * cap)));
           }
         });
       }
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const raw = JSON.parse(xhr.responseText);
-            resolve(this.normalizeResponse(raw));
-          } catch {
-            reject(new Error('Invalid server response'));
-          }
+          resolve(xhr);
         } else {
-          try {
-            const error = JSON.parse(xhr.responseText);
-            reject(new Error(error.error || `Upload failed: ${xhr.status}`));
-          } catch {
-            reject(new Error(`Upload failed: ${xhr.status}`));
-          }
+          reject(new Error(`Upload failed: ${xhr.status}`));
         }
       });
-
       xhr.addEventListener('error', () => reject(new Error('Network error')));
       xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
       xhr.timeout = this.timeout;
       xhr.addEventListener('timeout', () => reject(new Error('Upload timeout')));
 
-      xhr.open('PUT', `${this.baseUrl}/v2/upload`);
-      xhr.setRequestHeader('X-Filename', encodeURIComponent(name));
-      if (file.type) xhr.setRequestHeader('Content-Type', file.type);
-      if (kind) xhr.setRequestHeader('X-Sekai-Kind', kind);
-      if (opts.width != null) xhr.setRequestHeader('X-Image-Width', String(opts.width));
-      if (opts.height != null) xhr.setRequestHeader('X-Image-Height', String(opts.height));
-      xhr.send(file);
+      xhr.open(method, url);
+      xhr.send(body);
     });
   }
 

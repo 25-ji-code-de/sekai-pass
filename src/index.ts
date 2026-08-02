@@ -147,8 +147,8 @@ const CSP_REPORT_ONLY = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   // 头像来自对象存储
-  "img-src 'self' data: https://assets.nightcord.de5.net https://storage.nightcord.de5.net https://r2.nightcord.de5.net",
-  "connect-src 'self'",
+  "img-src 'self' data: https://assets.nightcord.de5.net https://r2.nightcord.de5.net",
+  "connect-src 'self' https://storage.nightcord.de5.net https://upload.nightcord.de5.net",
   "object-src 'none'",
   "base-uri 'self'",
   // form-action 同样不放这里 —— 见 CSP_ENFORCED 上方的说明。留在 Report-Only

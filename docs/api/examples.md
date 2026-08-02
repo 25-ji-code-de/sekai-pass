@@ -62,7 +62,7 @@ curl -X GET https://id.nightcord.de5.net/api/auth/me \
   "username": "testuser",
   "email": "test@example.com",
   "display_name": "Test User",
-  "avatar_url": "https://storage.nightcord.de5.net/avatars/xxx.webp",
+  "avatar_url": "https://r2.nightcord.de5.net/avatars/xxx.webp",
   "bio": "Hello, SEKAI"
 }
 ```
@@ -75,7 +75,7 @@ curl -X PUT https://id.nightcord.de5.net/api/auth/profile \
   -H "Content-Type: application/json" \
   -d '{
     "display_name": "Test User",
-    "avatar_url": "https://storage.nightcord.de5.net/avatars/xxx.webp",
+    "avatar_url": "https://r2.nightcord.de5.net/avatars/xxx.webp",
     "bio": "Hello, SEKAI"
   }'
 ```

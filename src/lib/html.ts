@@ -76,6 +76,7 @@ export function renderPage(title: string, content: string): string {
 export function authorizePage(app: any, user: any): string {
   const initial = app.name ? app.name.charAt(0).toUpperCase() : 'A';
   const userInitial = (user.username || user.email || 'U').charAt(0).toUpperCase();
+  const avatarUrl = typeof user.avatar_url === 'string' ? user.avatar_url.trim() : '';
 
   // Safe redirect URI display
   let redirectHost = 'Unknown';
@@ -142,8 +143,8 @@ export function authorizePage(app: any, user: any): string {
       
       <div class="connection-visual sekai-connection">
          <div class="entity sekai-entity user">
-           <div class="entity-avatar sekai-entity__avatar">
-             ${escapeHtml(userInitial)}
+           <div class="entity-avatar sekai-entity__avatar" data-avatar-url="${escapeHtml(avatarUrl)}">
+             <span class="entity-avatar__fallback">${escapeHtml(userInitial)}</span>
            </div>
            <div class="entity-label sekai-entity__label">YOU</div>
          </div>
@@ -200,5 +201,6 @@ export function authorizePage(app: any, user: any): string {
         </div>
       </form>
     </div>
+    <script type="module" src="/js/avatar.js"></script>
   `);
 }

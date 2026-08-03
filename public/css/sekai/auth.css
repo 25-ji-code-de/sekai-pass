@@ -137,6 +137,21 @@
   margin-bottom: 10px;
 }
 
+.entity-avatar__fallback {
+  position: relative;
+  z-index: 0;
+}
+
+.entity-avatar__image {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
 .sekai-entity__label {
   font-family: var(--sekai-font-mono);
   font-size: var(--sekai-text-micro);

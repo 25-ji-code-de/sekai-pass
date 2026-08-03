@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { showError, getQueryParams, setLoading, escapeHtml } from '../utils.js';
+import { mountAvatars } from '../avatar.js';
 
 export async function renderAuthorize(app, api, navigate) {
   const token = localStorage.getItem('token');
@@ -122,8 +123,8 @@ export async function renderAuthorize(app, api, navigate) {
         
         <div class="connection-visual sekai-connection">
            <div class="entity sekai-entity user">
-             <div class="entity-avatar sekai-entity__avatar" style="background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%);">
-               ${escapeHtml(userInitial)}
+             <div class="entity-avatar sekai-entity__avatar" data-avatar-url="${escapeHtml(user.avatar_url || '')}" style="background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%);">
+               <span class="entity-avatar__fallback">${escapeHtml(userInitial)}</span>
              </div>
              <div class="entity-label sekai-entity__label">YOU</div>
            </div>
@@ -170,6 +171,8 @@ export async function renderAuthorize(app, api, navigate) {
         </div>
       </div>
     `;
+
+    mountAvatars(authContent);
 
     // Handle allow button
     const allowBtn = document.getElementById('allow-btn');

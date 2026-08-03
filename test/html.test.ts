@@ -90,6 +90,11 @@ describe('authorizePage —— 属性上下文注入', () => {
     }
   });
 
+  test('avatar_url 里的属性闭合 payload 必须被转义', () => {
+    const html = authorizePage(baseApp, { ...baseUser, avatar_url: ATTR_BREAK });
+    assertNoInjection(html, 'avatar_url', ATTR_BREAK);
+  });
+
   test('转义后原值仍以实体形式保留（不能直接丢弃）', () => {
     const html = authorizePage({ ...baseApp, state: 'a"b' }, baseUser);
     assert.ok(html.includes('&quot;'), '双引号应转义成实体而不是被删掉');
@@ -129,6 +134,15 @@ describe('authorizePage —— 正常渲染不被破坏', () => {
     assert.ok(html.includes('value="sekai_hub_client"'));
     assert.ok(html.includes('value="abc123"'), 'state 应回填');
     assert.ok(html.includes('hub.nightcord.de5.net'), 'redirect 主机名应显示');
+  });
+
+  test('有头像 URL 时授权页提供头像挂载点', () => {
+    const html = authorizePage(baseApp, {
+      ...baseUser,
+      avatar_url: 'https://assets.nightcord.de5.net/avatars/nako.webp',
+    });
+    assert.match(html, /data-avatar-url="https:\/\/assets\.nightcord\.de5\.net\/avatars\/nako\.webp"/);
+    assert.match(html, /class="entity-avatar__fallback"/);
   });
 
   test('scope 图标等可信 HTML 不被转义', () => {

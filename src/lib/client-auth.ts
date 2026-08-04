@@ -18,7 +18,8 @@
 // Client Authentication Module (RFC 7523)
 // Implements Private Key JWT client authentication for OAuth 2.1
 
-import { decodeJWT, base64URLDecode } from "./jwt.ts";
+import { decodeJWT, verifyJWT } from "./jwt.ts";
+import type { JWTAlgorithm } from "./jwt.ts";
 
 export interface AuthenticationResult {
   authenticated: boolean;
@@ -219,7 +220,7 @@ async function authenticateClientWithJWT(
   }
 
   // Verify JWT signature
-  const signatureValid = await verifyJWTSignature(
+  const signatureValid = await verifyJWT(
     clientAssertion,
     keyResult.publicKeyJWK!,
     keyResult.algorithm!
@@ -252,81 +253,6 @@ async function authenticateClientWithJWT(
 }
 
 /**
- * Verify JWT signature using client's public key
- * Supports ES256 and RS256 algorithms
- */
-async function verifyJWTSignature(
-  token: string,
-  publicKeyJWK: JsonWebKey,
-  algorithm: string
-): Promise<boolean> {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      return false;
-    }
-
-    const [encodedHeader, encodedPayload, encodedSignature] = parts;
-
-    // Import public key based on algorithm
-    let publicKey: CryptoKey;
-    let verifyAlgorithm: any;
-
-    if (algorithm === "ES256") {
-      publicKey = await crypto.subtle.importKey(
-        "jwk",
-        publicKeyJWK,
-        {
-          name: "ECDSA",
-          namedCurve: "P-256"
-        },
-        false,
-        ["verify"]
-      );
-      verifyAlgorithm = {
-        name: "ECDSA",
-        hash: { name: "SHA-256" }
-      };
-    } else if (algorithm === "RS256") {
-      publicKey = await crypto.subtle.importKey(
-        "jwk",
-        publicKeyJWK,
-        {
-          name: "RSASSA-PKCS1-v1_5",
-          hash: "SHA-256"
-        },
-        false,
-        ["verify"]
-      );
-      verifyAlgorithm = {
-        name: "RSASSA-PKCS1-v1_5"
-      };
-    } else {
-      console.error(`Unsupported algorithm: ${algorithm}`);
-      return false;
-    }
-
-    // Decode signature
-    const signature = base64URLDecode(encodedSignature);
-
-    // Create signing input
-    const signingInput = `${encodedHeader}.${encodedPayload}`;
-    const signingInputBuffer = new TextEncoder().encode(signingInput);
-
-    // Verify signature
-    return await crypto.subtle.verify(
-      verifyAlgorithm,
-      publicKey,
-      signature,
-      signingInputBuffer
-    );
-  } catch (error) {
-    console.error("JWT signature verification error:", error);
-    return false;
-  }
-}
-
-/**
  * Get client's public key from database
  */
 async function getClientPublicKey(
@@ -336,7 +262,7 @@ async function getClientPublicKey(
 ): Promise<{
   valid: boolean;
   publicKeyJWK?: JsonWebKey;
-  algorithm?: string;
+  algorithm?: JWTAlgorithm;
   error?: string;
 }> {
   try {
@@ -352,7 +278,7 @@ async function getClientPublicKey(
     }
 
     const publicKeyJWK = JSON.parse(key.public_key_jwk as string);
-    const algorithm = key.algorithm as string;
+    const algorithm = key.algorithm as JWTAlgorithm;
 
     return {
       valid: true,

@@ -103,12 +103,12 @@ describe('几条不能松的底线', () => {
     );
   });
 
-  test('签名算法与 client-auth.ts 的实现对得上', () => {
+  test('签名算法与 JWT 验签实现对得上', () => {
     // 声明了却没实现，接入方会登记一把永远验不过的公钥
     const declared = codeArray('token_endpoint_auth_signing_alg_values_supported');
-    const impl = readFileSync(join(root, 'src/lib/client-auth.ts'), 'utf8');
+    const impl = readFileSync(join(root, 'src/lib/jwt.ts'), 'utf8');
     for (const alg of declared) {
-      assert.match(impl, new RegExp(`"${alg}"`), `声明了 ${alg} 但 client-auth.ts 里没实现`);
+      assert.match(impl, new RegExp(`"${alg}"`), `声明了 ${alg} 但 jwt.ts 里没实现`);
     }
   });
 });

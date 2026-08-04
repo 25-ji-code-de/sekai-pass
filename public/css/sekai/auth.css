@@ -43,7 +43,7 @@
 .sekai-auth::before {
   content: "";
   position: absolute;
-  inset: 0 0 auto 0;
+  inset: 0 0 auto;
   height: 3px;
   background: linear-gradient(
     90deg,

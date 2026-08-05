@@ -35,7 +35,7 @@
 
 - **网络日志**：IP 地址、User-Agent、访问时间等（由 Cloudflare 基础设施自动记录）
 - **会话 Cookie**：用于维持您的登录状态（Session ID）
-- **安全验证数据**：Cloudflare Turnstile 验证令牌（用于区分人类用户与机器人）
+- **安全验证数据**：Cloudflare Turnstile 或 hCaptcha 验证令牌（登录使用 Turnstile，注册使用 hCaptcha，用于区分人类用户与机器人）
 
 ### 1.3 我们不主动收集的信息
 
@@ -86,10 +86,17 @@
 
 ### 3.1 Cloudflare
 
-- **服务**：Cloudflare Workers (计算), Cloudflare D1 (数据库), Cloudflare Turnstile (人机验证)
+- **服务**：Cloudflare Workers (计算), Cloudflare D1 (数据库), Cloudflare Turnstile (登录人机验证)
 - **用途**：托管服务、数据存储、安全防护
 - **数据**：Cloudflare 可能会收集您的 IP 地址、系统配置信息及其他流量数据以提供安全防护和性能优化。
 - **隐私政策**：[https://www.cloudflare.com/privacypolicy/](https://www.cloudflare.com/privacypolicy/)
+
+### 3.2 hCaptcha
+
+- **服务**：hCaptcha（注册人机验证）
+- **用途**：防止机器人批量注册和服务滥用
+- **数据**：hCaptcha 可能处理 IP 地址、浏览器和设备信号，以判断注册请求是否由真人发起
+- **隐私政策**：[https://www.hcaptcha.com/privacy](https://www.hcaptcha.com/privacy)
 
 ---
 
@@ -107,7 +114,7 @@
 
 ### 4.2 第三方 Cookies
 
-Cloudflare 可能会设置必要的 Cookies 以提供安全防护（如 Turnstile 验证）。
+Cloudflare 可能会设置必要的 Cookies 以提供安全防护（如 Turnstile 验证）；注册页加载 hCaptcha 时，hCaptcha 也可能处理设备和网络信号。
 
 ---
 

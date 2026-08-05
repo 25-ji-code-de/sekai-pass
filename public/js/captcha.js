@@ -99,7 +99,7 @@ export function createCaptcha({ api, sitekey, widgetEl, statusEl, theme = 'dark'
   async function challengeInit() {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const r = await api.get('/challenge/init');
+        const r = await api.get('/challenge/init?provider=turnstile');
         challengeId = r.challengeId;
         powParams = r.pow || null;
         return true;

@@ -20,7 +20,7 @@ import { getCookie, setCookie } from "hono/cookie";
 import { initializeLucia } from "./auth.ts";
 import { hashPassword, verifyPassword, generateId } from "./password.ts";
 import { decryptPassword, validateRequest } from "./decrypt.ts";
-import { verifyTurnstileDetailed } from "./turnstile.ts";
+import { getCaptchaProvider } from "./captcha-provider.ts";
 import { createChallengeState, generatePoWChallenge, verifyPoWHash, POW_DIFFICULTY, POW_DIFFICULTY_STRICT, type ChallengeState } from "./pow.ts";
 import { validateScopeParameter, formatScopes } from "./scope.ts";
 import { isOIDCRequest } from "./oidc-scope.ts";
@@ -50,6 +50,8 @@ type Bindings = {
   KV: KVNamespace;
   TURNSTILE_SECRET_KEY: string;
   TURNSTILE_SITE_KEY: string;
+  HCAPTCHA_SECRET_KEY?: string;
+  HCAPTCHA_SITE_KEY?: string;
   /** Comma-separated ISO country codes that get PoW up-front (default "CN"). */
   POW_FAST_COUNTRIES?: string;
 };
@@ -229,7 +231,8 @@ function validateAuthorizeRequest(
 // Public configuration endpoint
 apiRouter.get("/config", async (c) => {
   return c.json({
-    turnstile_site_key: c.env.TURNSTILE_SITE_KEY || ''
+    turnstile_site_key: c.env.TURNSTILE_SITE_KEY || '',
+    hcaptcha_site_key: c.env.HCAPTCHA_SITE_KEY || '',
   });
 });
 
@@ -274,12 +277,17 @@ function isPowFastRegion(c: { req: { raw: Request }; env: Bindings }): boolean {
 // Challenge init — issue a session challenge (with PoW attached in fast regions,
 // so racing clients can start solving without an extra round trip)
 apiRouter.get("/challenge/init", async (c) => {
+  const requestedProvider = new URL(c.req.url).searchParams.get("provider") || "turnstile";
+  const provider = getCaptchaProvider(requestedProvider);
+  if (!provider) return c.json({ error: "不支持的人机验证提供商" }, 400);
+
   const challengeId = crypto.randomUUID();
   const ip = clientIp(c);
   const state = createChallengeState(ip);
+  state.captchaProvider = provider.name;
 
   let pow: { challenge: string; difficulty: number } | null = null;
-  if (isPowFastRegion(c)) {
+  if (provider.name === "turnstile" && isPowFastRegion(c)) {
     pow = generatePoWChallenge();
     state.powIssued = true;
     state.powChallenge = pow.challenge;
@@ -301,6 +309,10 @@ apiRouter.post("/challenge/report", async (c) => {
 
   const ip = clientIp(c);
   if (state.ip !== ip && state.ip !== "unknown") return c.json({ error: "验证会话 IP 不匹配" }, 403);
+
+  if (state.captchaProvider === "hcaptcha") {
+    return c.json({ error: "hCaptcha 不支持 PoW 降级" }, 400);
+  }
 
   if (turnstileLoaded) {
     state.turnstileAttempted = true;
@@ -339,7 +351,9 @@ apiRouter.post("/challenge/report", async (c) => {
 async function verifyCaptcha(
   body: Record<string, any>,
   kv: KVNamespace,
-  secretKey: string,
+  turnstileSecretKey: string,
+  hcaptchaSecretKey: string | undefined,
+  requiredProvider: "turnstile" | "hcaptcha",
   remoteIp?: string
 ): Promise<string | null> {
   const challengeId = body.challengeId;
@@ -354,18 +368,34 @@ async function verifyCaptcha(
   if (state.ip !== remoteIp && state.ip !== "unknown") return "验证会话 IP 不匹配";
 
   const type = body.captchaType;
+  const expectedProvider = state.captchaProvider || "turnstile";
+  if (expectedProvider !== requiredProvider) {
+    return "验证方式与当前操作不匹配";
+  }
+  if (type !== expectedProvider && !(expectedProvider === "turnstile" && type === "pow")) {
+    return "验证方式与验证会话不匹配";
+  }
 
   if (type === 'turnstile') {
-    const token = body["cf-turnstile-response"];
+    const provider = getCaptchaProvider("turnstile")!;
+    const token = body[provider.responseField];
     if (!token) return "请完成人机验证";
-    // remoteIp is intentionally not forwarded to siteverify (see turnstile.ts)
-    const result = await verifyTurnstileDetailed(token, secretKey);
+    const result = await provider.verify(token, turnstileSecretKey);
     if (!result.success) {
       console.error('Turnstile reject for challenge', challengeId, result.errorCodes, 'ip=', remoteIp);
       return "人机验证失败，请重试";
     }
+  } else if (type === 'hcaptcha') {
+    const provider = getCaptchaProvider("hcaptcha")!;
+    const token = body[provider.responseField];
+    if (!token) return "请完成人机验证";
+    const result = await provider.verify(token, hcaptchaSecretKey || "", remoteIp);
+    if (!result.success) {
+      console.error('hCaptcha reject for challenge', challengeId, result.errorCodes, 'ip=', remoteIp);
+      return "人机验证失败，请重试";
+    }
   } else if (type === 'pow') {
-    if (!state.powIssued) return "未授权的验证方式";
+    if (expectedProvider !== "turnstile" || !state.powIssued) return "未授权的验证方式";
     const nonce = body.powNonce;
     if (!nonce || !state.powChallenge) return "验证数据不完整";
     const valid = await verifyPoWHash(state.powChallenge, nonce, state.powDifficulty ?? POW_DIFFICULTY);
@@ -416,7 +446,7 @@ apiRouter.post("/auth/login", async (c) => {
     }
 
     // Verify captcha (Turnstile or PoW fallback)
-    const captchaError = await verifyCaptcha(body, c.env.KV, c.env.TURNSTILE_SECRET_KEY, clientIp(c));
+    const captchaError = await verifyCaptcha(body, c.env.KV, c.env.TURNSTILE_SECRET_KEY, c.env.HCAPTCHA_SECRET_KEY, "turnstile", clientIp(c));
     if (captchaError) {
       return c.json({ error: captchaError }, 400);
     }
@@ -479,8 +509,8 @@ apiRouter.post("/auth/register", async (c) => {
       return c.json({ error: "所有必填项不能为空" }, 400);
     }
 
-    // Verify captcha (Turnstile or PoW fallback)
-    const captchaError = await verifyCaptcha(body, c.env.KV, c.env.TURNSTILE_SECRET_KEY, clientIp(c));
+    // Registration requires hCaptcha; Turnstile and PoW proofs are rejected.
+    const captchaError = await verifyCaptcha(body, c.env.KV, c.env.TURNSTILE_SECRET_KEY, c.env.HCAPTCHA_SECRET_KEY, "hcaptcha", clientIp(c));
     if (captchaError) {
       return c.json({ error: captchaError }, 400);
     }

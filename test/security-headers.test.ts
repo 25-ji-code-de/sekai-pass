@@ -127,6 +127,12 @@ describe('CSP —— Report-Only 的完整策略', () => {
     assert.match(csp, /frame-src[^;]*https:\/\/challenges\.cloudflare\.com/);
   });
 
+  test('放行 hCaptcha 的脚本、挑战 iframe 与请求', () => {
+    assert.match(csp, /script-src[^;]*https:\/\/js\.hcaptcha\.com/);
+    assert.match(csp, /frame-src[^;]*https:\/\/\*\.hcaptcha\.com/);
+    assert.match(csp, /connect-src[^;]*https:\/\/\*\.hcaptcha\.com/);
+  });
+
   test('script-src 不含 unsafe-inline —— index.html 没有内联脚本', () => {
     const scriptSrc = csp.split(';').find((d) => d.trim().startsWith('script-src')) ?? '';
     assert.ok(!scriptSrc.includes("'unsafe-inline'"), 'SPA 入口无内联脚本，不该放宽');

@@ -21,10 +21,12 @@ async function loadConfig() {
   try {
     const config = await api.get('/config');
     window.TURNSTILE_SITE_KEY = config.turnstile_site_key;
+    window.HCAPTCHA_SITE_KEY = config.hcaptcha_site_key;
   } catch (error) {
     console.error('Failed to load config:', error);
     // Use default test key if config fails to load
     window.TURNSTILE_SITE_KEY = '1x00000000000000000000AA';
+    window.HCAPTCHA_SITE_KEY = '';
   }
 }
 

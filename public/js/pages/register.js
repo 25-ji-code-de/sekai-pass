@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { encryptPassword, generateNonce, getFingerprint, showError, hideMessages, setLoading } from '../utils.js';
-import { createCaptcha } from '../captcha.js';
+import { createHCaptcha } from '../hcaptcha.js';
 
 export function renderRegister(app, api, navigate) {
-  const turnstileSiteKey = window.TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
+  const hcaptchaSiteKey = window.HCAPTCHA_SITE_KEY || '';
 
   app.innerHTML = `
     <div class="container">
@@ -38,8 +38,7 @@ export function renderRegister(app, api, navigate) {
         </label>
 
         <div class="form-group captcha-container">
-          <div id="turnstile-widget"></div>
-          <div id="pow-status" class="pow-status" style="display: none;"></div>
+          <div id="hcaptcha-widget"></div>
         </div>
         <button type="submit" id="register-btn">完成注册</button>
       </form>
@@ -53,11 +52,10 @@ export function renderRegister(app, api, navigate) {
     </footer>
   `;
 
-  const captcha = createCaptcha({
+  const captcha = createHCaptcha({
     api,
-    sitekey: turnstileSiteKey,
-    widgetEl: document.getElementById('turnstile-widget'),
-    statusEl: document.getElementById('pow-status'),
+    sitekey: hcaptchaSiteKey,
+    widgetEl: document.getElementById('hcaptcha-widget'),
   });
 
   const form = document.getElementById('register-form');
@@ -102,11 +100,7 @@ export function renderRegister(app, api, navigate) {
         challengeId: proof.challengeId,
         captchaType: proof.type,
       };
-      if (proof.type === 'turnstile') {
-        payload['cf-turnstile-response'] = proof.token;
-      } else {
-        payload.powNonce = proof.nonce;
-      }
+      payload['h-captcha-response'] = proof.token;
 
       const response = await api.post('/auth/register', payload);
 

@@ -43,7 +43,7 @@ const PUBLIC = new Map<string, string>([
   ["POST /auth/logout", "自带 token；无 token 时也没什么可做"],
   ["GET /challenge/init", "登录前的人机校验，此时还没有会话"],
   ["POST /challenge/report", "登录前的人机校验；靠 KV 里的 challengeId + IP 绑定"],
-  ["GET /config", "只返回 Turnstile site key —— site key 本来就要放进页面"],
+  ["GET /config", "只返回验证码 site key —— site key 本来就要放进页面"],
   ["GET /oauth/config", "只返回端点 URL，与 discovery 同性质"],
   [
     "GET /.well-known/oauth-authorization-server",

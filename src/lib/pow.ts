@@ -57,6 +57,8 @@ function hasLeadingZeroBits(hexHash: string, bits: number): boolean {
 
 export interface ChallengeState {
   ip: string;
+  /** Provider selected when the challenge was issued; old states default to Turnstile. */
+  captchaProvider?: "turnstile" | "hcaptcha";
   issued: number;
   turnstileAttempted: boolean;
   powIssued: boolean;

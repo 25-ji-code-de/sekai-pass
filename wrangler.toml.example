@@ -3,6 +3,7 @@
 #
 # 需要在 Cloudflare Dashboard 配置以下环境变量：
 #   TURNSTILE_SITE_KEY   — Turnstile site key
+#   HCAPTCHA_SITE_KEY    — hCaptcha site key（仅注册页使用）
 #   D1_DATABASE_ID       — sekai_pass_db 的 database ID
 #   KV_NAMESPACE_ID      — OIDC_KEYS KV namespace ID
 #   KV_PREVIEW_ID        — OIDC_KEYS preview KV namespace ID
@@ -16,6 +17,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 ENVIRONMENT = "production"
 TURNSTILE_SITE_KEY = "${TURNSTILE_SITE_KEY}"
+HCAPTCHA_SITE_KEY = "${HCAPTCHA_SITE_KEY}"
 
 # Static assets configuration
 [assets]

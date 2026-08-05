@@ -93,7 +93,17 @@ npx wrangler secret put KEY_ENCRYPTION_SECRET
 # 粘贴上面生成的密钥
 ```
 
-### 6. 本地开发
+### 6. 配置人机验证
+
+在 `wrangler.toml` 的 `[vars]` 中设置 `TURNSTILE_SITE_KEY`（登录）和
+`HCAPTCHA_SITE_KEY`（注册），并将服务端密钥保存为 Worker secrets：
+
+```bash
+npx wrangler secret put TURNSTILE_SECRET_KEY
+npx wrangler secret put HCAPTCHA_SECRET_KEY
+```
+
+### 7. 本地开发
 
 ```bash
 npm run dev
@@ -494,7 +504,7 @@ npx wrangler tail
 3. ✅ 应用数据库架构（schema.sql）
 4. ✅ 创建 KV 命名空间用于 OIDC 密钥存储
 5. ✅ 设置加密密钥（KEY_ENCRYPTION_SECRET）
-6. ✅ 配置 Turnstile（可选，用于防机器人）
+6. ✅ 配置 Turnstile（登录）和 hCaptcha（注册）密钥，用于防止机器人滥用
 
 ### 部署命令
 

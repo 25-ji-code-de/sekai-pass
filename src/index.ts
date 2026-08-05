@@ -40,6 +40,8 @@ type Bindings = {
   KV: KVNamespace;
   TURNSTILE_SECRET_KEY: string;
   TURNSTILE_SITE_KEY: string;
+  HCAPTCHA_SECRET_KEY?: string;
+  HCAPTCHA_SITE_KEY?: string;
   KEY_ENCRYPTION_SECRET: string;
   POW_FAST_COUNTRIES?: string;
   ASSETS: Fetcher;
@@ -141,14 +143,14 @@ const CSP_ENFORCED = [
 
 const CSP_REPORT_ONLY = [
   "default-src 'self'",
-  // Turnstile 的脚本与它注入的挑战 iframe
-  "script-src 'self' https://challenges.cloudflare.com",
-  "frame-src https://challenges.cloudflare.com",
+  // Turnstile and hCaptcha scripts plus challenge frames
+  "script-src 'self' https://challenges.cloudflare.com https://js.hcaptcha.com",
+  "frame-src https://challenges.cloudflare.com https://*.hcaptcha.com",
+  "connect-src 'self' https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com https://storage.nightcord.de5.net https://upload.nightcord.de5.net",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   // 头像来自对象存储
   "img-src 'self' data: https://assets.nightcord.de5.net https://r2.nightcord.de5.net",
-  "connect-src 'self' https://storage.nightcord.de5.net https://upload.nightcord.de5.net",
   "object-src 'none'",
   "base-uri 'self'",
   // form-action 同样不放这里 —— 见 CSP_ENFORCED 上方的说明。留在 Report-Only

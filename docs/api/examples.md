@@ -15,7 +15,9 @@ curl -X POST https://id.nightcord.de5.net/api/auth/register \
     "nonce": "random_nonce",
     "fp": "browser_fingerprint",
     "ts": 1234567890,
-    "cf-turnstile-response": "turnstile_token"
+    "challengeId": "challenge_id",
+    "captchaType": "hcaptcha",
+    "h-captcha-response": "hcaptcha_token"
   }'
 ```
 
@@ -30,6 +32,8 @@ curl -X POST https://id.nightcord.de5.net/api/auth/login \
     "nonce": "random_nonce",
     "fp": "browser_fingerprint",
     "ts": 1234567890,
+    "challengeId": "challenge_id",
+    "captchaType": "turnstile",
     "cf-turnstile-response": "turnstile_token"
   }'
 ```

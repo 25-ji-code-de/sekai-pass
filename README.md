@@ -113,7 +113,7 @@ https://<你的域名>/api/auth/external/<provider>/callback
 ```
 
 将公开 Client ID 设置为 GitHub Actions Variables（或本地 `wrangler.toml` 的 `[vars]`）：
-`GOOGLE_CLIENT_ID`、`MICROSOFT_CLIENT_ID`、`GITHUB_CLIENT_ID`、`X_CLIENT_ID`、
+`GOOGLE_CLIENT_ID`、`MICROSOFT_CLIENT_ID`、`GH_OAUTH_CLIENT_ID`、`X_CLIENT_ID`、
 `LINUXDO_CLIENT_ID`。对应的 Client Secret 只作为 Worker secret 上传；没有同时配置
 ID 与 Secret 的 provider 会自动从登录页隐藏：
 

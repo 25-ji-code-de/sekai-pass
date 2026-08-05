@@ -550,6 +550,125 @@ button:disabled {
   color: var(--primary-color);
 }
 
+/* Public service information page used as the OAuth application homepage. */
+.about-page {
+  width: min(92vw, 680px);
+  margin: auto;
+  padding: 24px 0;
+}
+
+.about-shell {
+  position: relative;
+  padding: clamp(28px, 6vw, 56px);
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--sekai-radius-panel);
+  box-shadow: 0 20px 60px var(--card-shadow);
+  overflow: hidden;
+}
+
+.about-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--gradient-bg), var(--primary-color), var(--gradient-bg));
+}
+
+.about-brand {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.about-brand img {
+  display: block;
+  max-width: min(100%, 300px);
+  height: auto;
+}
+
+.about-brand span {
+  color: var(--text-muted);
+  font-family: var(--code-font);
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+.about-rule {
+  height: 1px;
+  margin: 28px 0;
+  background: var(--border-color);
+}
+
+.about-shell h1 {
+  margin: 0 0 10px;
+  color: var(--text-main);
+  font-size: 38px;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.about-lead {
+  margin: 0;
+  color: var(--primary-color);
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.about-copy {
+  max-width: 52ch;
+  margin: 22px auto 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.about-actions {
+  display: flex;
+  gap: 12px;
+  max-width: 380px;
+  margin: 30px auto 0;
+}
+
+.about-actions button {
+  margin-top: 0;
+}
+
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 28px;
+  font-size: 12px;
+}
+
+.about-links a {
+  color: var(--text-muted);
+  text-underline-offset: 4px;
+}
+
+.about-links a:hover {
+  color: var(--primary-color);
+}
+
+@media (max-width: 520px) {
+  .about-page {
+    padding: 12px;
+  }
+
+  .about-actions {
+    flex-direction: column;
+  }
+
+  .about-shell h1 {
+    font-size: 28px;
+  }
+}
+
 /* Third-party authentication */
 .external-login-slot[hidden],
 .external-login-overlay[hidden] {

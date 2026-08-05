@@ -7,6 +7,7 @@ import { renderAuthorize } from './pages/authorize.js';
 import { renderSettings } from './pages/settings.js';
 import { renderApps } from './pages/apps.js';
 import { renderExternalComplete } from './pages/external-complete.js';
+import { renderAbout } from './pages/about.js';
 
 const api = new APIClient('/api');
 const app = document.getElementById('app');
@@ -37,6 +38,7 @@ const routes = {
   '/login': renderLogin,
   '/register': renderRegister,
   '/external/complete': renderExternalComplete,
+  '/about': renderAbout,
   '/settings': renderSettings,
   '/apps': renderApps,
   '/oauth/authorize': renderAuthorize,
@@ -53,7 +55,14 @@ function render() {
 
   // Check authentication for protected routes
   const token = localStorage.getItem('token');
-  const publicRoutes = ['/login', '/register', '/external/complete'];
+  const publicRoutes = ['/login', '/register', '/external/complete', '/about'];
+
+  // Google and other identity providers need a public homepage describing the
+  // service. OAuth redirect parameters still take the normal login path.
+  if (!token && path === '/' && !new URLSearchParams(window.location.search).get('redirect')) {
+    renderAbout(app, api, navigate);
+    return;
+  }
 
   // Check for redirect parameter (for all routes when logged in)
   if (token) {

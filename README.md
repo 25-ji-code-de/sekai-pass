@@ -125,12 +125,6 @@ npx wrangler secret put X_CLIENT_SECRET
 npx wrangler secret put LINUXDO_CLIENT_SECRET
 ```
 
-首次启用第三方登录前执行新增的数据库迁移：
-
-```bash
-npm run migrate -- --remote
-```
-
 ### 8. 本地开发
 
 ```bash

@@ -713,13 +713,15 @@ apiRouter.post("/auth/external/complete", async (c) => {
     }
 
     const userId = generateId();
-    const unusablePassword = await hashPassword(randomOAuthValue(48));
+    // PBKDF2 hashes are hex-only. This sentinel can never verify as a password
+    // and lets existing databases distinguish social-only accounts without a migration.
+    const unusablePassword = `!external:${randomOAuthValue(48)}`;
     const now = Date.now();
     await c.env.DB.batch([
       c.env.DB.prepare(
         `INSERT INTO users
-          (id, username, email, hashed_password, password_login_enabled, display_name, avatar_url, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+          (id, username, email, hashed_password, display_name, avatar_url, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         userId,
         username,
@@ -755,7 +757,7 @@ apiRouter.get("/auth/external/accounts", async (c) => {
       "SELECT provider, created_at FROM oauth_accounts WHERE user_id = ? ORDER BY created_at",
     ).bind(user.id).all(),
     c.env.DB.prepare(
-      "SELECT password_login_enabled FROM users WHERE id = ?",
+      "SELECT hashed_password FROM users WHERE id = ?",
     ).bind(user.id).first(),
   ]);
   const enabled = new Set(listEnabledExternalProviders(c.env).map((item) => item.id));
@@ -772,7 +774,7 @@ apiRouter.get("/auth/external/accounts", async (c) => {
     };
   }).filter(Boolean);
   return c.json({
-    password_login_enabled: localUser?.password_login_enabled !== 0,
+    password_login_enabled: !String(localUser?.hashed_password || "").startsWith("!external:"),
     accounts,
     providers: listEnabledExternalProviders(c.env),
   }, 200, { "Cache-Control": "no-store" });
@@ -785,10 +787,10 @@ apiRouter.delete("/auth/external/accounts/:provider", async (c) => {
   if (!isExternalProviderId(providerId)) return c.json({ error: "登录方式无效" }, 400);
 
   const [localUser, accounts] = await Promise.all([
-    c.env.DB.prepare("SELECT password_login_enabled FROM users WHERE id = ?").bind(user.id).first(),
+    c.env.DB.prepare("SELECT hashed_password FROM users WHERE id = ?").bind(user.id).first(),
     c.env.DB.prepare("SELECT provider FROM oauth_accounts WHERE user_id = ?").bind(user.id).all(),
   ]);
-  const hasPassword = localUser?.password_login_enabled !== 0;
+  const hasPassword = !String(localUser?.hashed_password || "").startsWith("!external:");
   if (!hasPassword && accounts.results.length <= 1) {
     return c.json({ error: "必须保留至少一种登录方式" }, 409);
   }
@@ -830,7 +832,7 @@ apiRouter.post("/auth/login", async (c) => {
       return c.json({ error: "用户名或密码错误" }, 400);
     }
 
-    if (result.password_login_enabled === 0) {
+    if (String(result.hashed_password).startsWith("!external:")) {
       return c.json({ error: "该账号未启用密码登录，请使用已绑定的第三方账号" }, 400);
     }
 

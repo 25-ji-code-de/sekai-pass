@@ -152,8 +152,11 @@ async function main() {
     );
     console.log(`── ${file} ──`);
 
-    for (const stmt of idempotent) exec(target, stmt);
-    if (idempotent.length) console.log(`  ${idempotent.length} 条可重复语句已执行`);
+    // Tables must exist before ALTER, while indexes that reference new columns
+    // must be created after ALTER. A single idempotent pass cannot satisfy both.
+    const tableCreates = idempotent.filter((stmt) => /^CREATE\s+TABLE\b/i.test(stmt));
+    const afterColumns = idempotent.filter((stmt) => !/^CREATE\s+TABLE\b/i.test(stmt));
+    for (const stmt of tableCreates) exec(target, stmt);
 
     // 每张表只查一次
     const existing = new Map();
@@ -168,6 +171,8 @@ async function main() {
       console.log(`  + ${add.table}.${add.column}`);
     }
     if (skipped) console.log(`  ${skipped} 列已存在，跳过`);
+    for (const stmt of afterColumns) exec(target, stmt);
+    if (idempotent.length) console.log(`  ${idempotent.length} 条可重复语句已执行`);
     console.log();
   }
 

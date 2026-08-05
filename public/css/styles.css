@@ -550,6 +550,257 @@ button:disabled {
   color: var(--primary-color);
 }
 
+/* Third-party authentication */
+.external-login-slot[hidden],
+.external-login-overlay[hidden] {
+  display: none;
+}
+
+.external-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 8px;
+  color: rgb(var(--sekai-fg-subtle));
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-micro);
+}
+
+.external-divider::before,
+.external-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgb(var(--sekai-line));
+}
+
+.external-login-trigger {
+  margin-top: 0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.modal-open {
+  overflow: hidden;
+}
+
+.external-login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 0.68);
+}
+
+.external-login-dialog {
+  width: min(92vw, 360px);
+  padding: 22px;
+  background: rgb(var(--sekai-surface-raised));
+  border: 1px solid rgb(var(--sekai-line));
+  border-radius: var(--sekai-radius-md);
+  box-shadow: var(--sekai-elev-4);
+}
+
+.external-login-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.external-login-head h2 {
+  margin: 0;
+  font-size: var(--sekai-text-lg);
+  letter-spacing: 0;
+}
+
+.external-login-close {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: rgb(var(--sekai-fg-muted));
+  border: 1px solid transparent;
+  border-radius: var(--sekai-radius-sm);
+  font-size: 25px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.external-login-close:hover {
+  background: rgb(255 255 255 / 0.05);
+  border-color: rgb(var(--sekai-line));
+  box-shadow: none;
+}
+
+.external-provider-list {
+  display: grid;
+  gap: 8px;
+}
+
+.external-provider {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 48px;
+  margin: 0;
+  padding: 11px 14px;
+  background: rgb(var(--sekai-surface-sunken));
+  color: rgb(var(--sekai-fg));
+  border: 1px solid rgb(var(--sekai-line));
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.external-provider:hover {
+  background: rgb(255 255 255 / 0.06);
+  border-color: rgb(var(--sekai-fg-subtle));
+  box-shadow: none;
+}
+
+.external-provider img,
+.login-method-icon,
+.external-profile-provider img {
+  flex: none;
+  object-fit: contain;
+}
+
+.external-provider--github img,
+.external-provider--x img,
+.provider-icon--github,
+.provider-icon--x {
+  filter: invert(1);
+}
+
+.external-complete-container {
+  width: min(92vw, 420px);
+}
+
+.external-complete-loading {
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(var(--sekai-fg-muted));
+  font-size: var(--sekai-text-sm);
+}
+
+.external-profile-provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: rgb(var(--sekai-fg-muted));
+  font-size: var(--sekai-text-sm);
+}
+
+.external-profile-title {
+  margin: 0 0 24px;
+  font-size: var(--sekai-text-xl);
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.external-auth-divider::after {
+  content: 'SIGN-IN METHODS';
+}
+
+.settings-section-head h3 {
+  margin: 0 0 14px;
+  color: rgb(var(--sekai-fg));
+  font-size: var(--sekai-text-md);
+  letter-spacing: 0;
+}
+
+.login-methods-list {
+  border-top: 1px solid rgb(var(--sekai-line));
+}
+
+.login-method-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  border-bottom: 1px solid rgb(var(--sekai-line));
+}
+
+.login-method-password {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: rgb(var(--sekai-accent));
+  font-family: var(--sekai-font-mono);
+  font-weight: 700;
+}
+
+.login-method-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.login-method-name strong {
+  color: rgb(var(--sekai-fg));
+  font-size: var(--sekai-text-sm);
+}
+
+.login-method-name span,
+.login-method-status {
+  color: rgb(var(--sekai-fg-muted));
+  font-size: var(--sekai-text-meta);
+}
+
+.btn-link {
+  width: auto;
+  min-width: 52px;
+  margin: 0;
+  padding: 8px 10px;
+  background: transparent;
+  color: rgb(var(--sekai-accent));
+  border: 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--sekai-text-label);
+}
+
+.btn-link:hover {
+  background: rgb(255 255 255 / 0.05);
+  box-shadow: none;
+}
+
+.btn-link-danger {
+  color: rgb(var(--sekai-danger));
+}
+
+@media (max-width: 600px) {
+  .external-login-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .external-login-dialog {
+    width: 100%;
+    padding: 22px 20px max(22px, env(safe-area-inset-bottom));
+    border-radius: var(--sekai-radius-md) var(--sekai-radius-md) 0 0;
+  }
+
+  .external-complete-container {
+    padding: 24px;
+  }
+}
+
 
 /* Secondary Button Styles */
 .btn-secondary {

@@ -6,6 +6,7 @@ import { renderDashboard } from './pages/dashboard.js';
 import { renderAuthorize } from './pages/authorize.js';
 import { renderSettings } from './pages/settings.js';
 import { renderApps } from './pages/apps.js';
+import { renderExternalComplete } from './pages/external-complete.js';
 
 const api = new APIClient('/api');
 const app = document.getElementById('app');
@@ -35,6 +36,7 @@ const routes = {
   '/': renderDashboard,
   '/login': renderLogin,
   '/register': renderRegister,
+  '/external/complete': renderExternalComplete,
   '/settings': renderSettings,
   '/apps': renderApps,
   '/oauth/authorize': renderAuthorize,
@@ -51,7 +53,7 @@ function render() {
 
   // Check authentication for protected routes
   const token = localStorage.getItem('token');
-  const publicRoutes = ['/login', '/register'];
+  const publicRoutes = ['/login', '/register', '/external/complete'];
 
   // Check for redirect parameter (for all routes when logged in)
   if (token) {

@@ -85,6 +85,16 @@ export async function renderSettings(app, api, navigate) {
            <button type="submit" id="save-btn" class="btn-auto" style="min-width: 140px;">保存修改</button>
         </div>
       </form>
+
+      <div class="form-divider external-auth-divider"></div>
+      <section class="settings-login-methods" aria-labelledby="login-methods-title">
+        <div class="settings-section-head">
+          <h3 id="login-methods-title">登录方式</h3>
+        </div>
+        <div id="login-methods-list" class="login-methods-list">
+          <div class="external-complete-loading">正在加载...</div>
+        </div>
+      </section>
     </div>
 
     <footer class="site-footer">
@@ -169,6 +179,99 @@ export async function renderSettings(app, api, navigate) {
   });
 
   let currentUser = {};
+
+  const query = new URLSearchParams(window.location.search);
+  if (query.get('external') === 'linked') showSuccess('第三方登录方式已绑定');
+  if (query.get('external_error')) showError(query.get('external_error'));
+
+  async function loadLoginMethods() {
+    const list = document.getElementById('login-methods-list');
+    try {
+      const data = await api.get('/auth/external/accounts', {
+        headers: api.getAuthHeaders()
+      });
+      list.replaceChildren();
+
+      if (data.password_login_enabled) {
+        const passwordRow = document.createElement('div');
+        passwordRow.className = 'login-method-row';
+        passwordRow.innerHTML = '<div class="login-method-icon login-method-password" aria-hidden="true">••</div><div class="login-method-name"><strong>密码</strong><span>已启用</span></div><span class="login-method-status">已连接</span>';
+        list.appendChild(passwordRow);
+      }
+
+      const linked = new Map(data.accounts.map((account) => [account.id, account]));
+      const allProviders = [...data.providers];
+      for (const account of data.accounts) {
+        if (!allProviders.some((provider) => provider.id === account.id)) allProviders.push(account);
+      }
+
+      for (const provider of allProviders) {
+        const account = linked.get(provider.id);
+        const row = document.createElement('div');
+        row.className = 'login-method-row';
+
+        const icon = document.createElement('img');
+        icon.className = `login-method-icon provider-icon--${provider.id}`;
+        icon.src = provider.icon;
+        icon.alt = '';
+        icon.width = 24;
+        icon.height = 24;
+
+        const name = document.createElement('div');
+        name.className = 'login-method-name';
+        const strong = document.createElement('strong');
+        strong.textContent = provider.name;
+        const detail = document.createElement('span');
+        detail.textContent = account ? '已绑定' : '未绑定';
+        name.append(strong, detail);
+
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = account ? 'btn-link btn-link-danger' : 'btn-link';
+        action.textContent = account ? '解除' : '绑定';
+        if (!provider.available && account) {
+          detail.textContent = '配置已停用';
+        }
+        if (!provider.available && !account) action.disabled = true;
+
+        action.addEventListener('click', async () => {
+          if (account) {
+            if (!window.confirm(`解除 ${provider.name} 后将无法再用该账号登录。确定继续？`)) return;
+            setLoading(action, true);
+            try {
+              await api.delete(`/auth/external/accounts/${encodeURIComponent(provider.id)}`, {
+                headers: api.getAuthHeaders()
+              });
+              showSuccess(`${provider.name} 已解除绑定`);
+              await loadLoginMethods();
+            } catch (error) {
+              showError(error.message || '解除绑定失败');
+              setLoading(action, false);
+            }
+            return;
+          }
+
+          setLoading(action, true);
+          try {
+            const result = await api.post(`/auth/external/${encodeURIComponent(provider.id)}/start`, {
+              mode: 'link'
+            }, { headers: api.getAuthHeaders() });
+            window.location.assign(result.authorization_url);
+          } catch (error) {
+            showError(error.message || '无法启动账号绑定');
+            setLoading(action, false);
+          }
+        });
+
+        row.append(icon, name, action);
+        list.appendChild(row);
+      }
+    } catch (error) {
+      list.textContent = error.message || '登录方式加载失败';
+    }
+  }
+
+  loadLoginMethods();
 
   try {
     const user = await api.get('/auth/me', {

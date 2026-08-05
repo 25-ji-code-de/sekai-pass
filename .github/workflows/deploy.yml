@@ -18,11 +18,21 @@ jobs:
         env:
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
           HCAPTCHA_SITE_KEY: ${{ vars.HCAPTCHA_SITE_KEY }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
+          GITHUB_CLIENT_ID: ${{ vars.GITHUB_CLIENT_ID }}
+          X_CLIENT_ID: ${{ vars.X_CLIENT_ID }}
+          LINUXDO_CLIENT_ID: ${{ vars.LINUXDO_CLIENT_ID }}
           D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
           KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
           KV_PREVIEW_ID: ${{ secrets.KV_PREVIEW_ID }}
         run: |
-          envsubst '${TURNSTILE_SITE_KEY} ${HCAPTCHA_SITE_KEY} ${D1_DATABASE_ID} ${KV_NAMESPACE_ID} ${KV_PREVIEW_ID}' < wrangler.toml.example > wrangler.toml
+          envsubst '${TURNSTILE_SITE_KEY} ${HCAPTCHA_SITE_KEY} ${GOOGLE_CLIENT_ID} ${MICROSOFT_CLIENT_ID} ${GITHUB_CLIENT_ID} ${X_CLIENT_ID} ${LINUXDO_CLIENT_ID} ${D1_DATABASE_ID} ${KV_NAMESPACE_ID} ${KV_PREVIEW_ID}' < wrangler.toml.example > wrangler.toml
+      - name: Apply D1 migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run migrate -- --remote
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -36,6 +36,21 @@ import {
 } from "./applications.ts";
 import { isUniqueConstraintError } from "./db-errors.ts";
 import {
+  buildAuthorizationUrl,
+  createPKCEChallenge,
+  exchangeAuthorizationCode,
+  getExternalProvider,
+  isExternalProviderEnabled,
+  isExternalProviderId,
+  listEnabledExternalProviders,
+  randomOAuthValue,
+  resolveExternalIdentity,
+  sanitizeInternalRedirect,
+  type ExternalAuthEnv,
+  type ExternalIdentity,
+  type ExternalProviderId,
+} from "./external-auth.ts";
+import {
   listClientKeys,
   addClientKey,
   setClientKeyStatus,
@@ -45,7 +60,7 @@ import {
   type KeyStatus,
 } from "./client-keys.ts";
 
-type Bindings = {
+type Bindings = ExternalAuthEnv & {
   DB: D1Database;
   KV: KVNamespace;
   TURNSTILE_SECRET_KEY: string;
@@ -62,6 +77,53 @@ type Variables = {
 };
 
 export const apiRouter = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+type ExternalFlowState = {
+  provider: ExternalProviderId;
+  verifier: string;
+  nonce: string;
+  redirect: string;
+  mode: "login" | "link";
+  userId?: string;
+  createdAt: number;
+};
+
+type ExternalPendingState = {
+  identity: ExternalIdentity;
+  redirect: string;
+  createdAt: number;
+};
+
+const EXTERNAL_FLOW_TTL = 10 * 60;
+
+function externalCallbackUrl(requestUrl: string, provider: ExternalProviderId): string {
+  return `${new URL(requestUrl).origin}/api/auth/external/${provider}/callback`;
+}
+
+function externalErrorRedirect(message: string, mode: "login" | "link" = "login"): string {
+  const path = mode === "link" ? "/settings" : "/login";
+  const params = new URLSearchParams({ external_error: message });
+  return `${path}?${params}`;
+}
+
+async function createExternalSession(
+  c: any,
+  userId: string,
+  redirect: string,
+): Promise<string> {
+  const lucia = initializeLucia(c.env.DB);
+  const session = await lucia.createSession(userId, {});
+  const sessionCookie = lucia.createSessionCookie(session.id);
+  setCookie(c, sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
+
+  const ticket = randomOAuthValue();
+  await c.env.KV.put(
+    `external:handoff:${ticket}`,
+    JSON.stringify({ sessionId: session.id, redirect }),
+    { expirationTtl: EXTERNAL_FLOW_TTL },
+  );
+  return ticket;
+}
 
 function parseRedirectUris(redirectUris: string): string[] {
   try {
@@ -435,6 +497,307 @@ apiRouter.use("*", async (c, next) => {
   await next();
 });
 
+// Enabled upstream providers only. Client ids and secrets are never returned.
+apiRouter.get("/auth/external/providers", async (c) => {
+  return c.json({ providers: listEnabledExternalProviders(c.env) }, 200, {
+    "Cache-Control": "public, max-age=300",
+  });
+});
+
+// Create a stateful OAuth flow and return the upstream authorization URL.
+apiRouter.post("/auth/external/:provider/start", async (c) => {
+  const providerId = c.req.param("provider");
+  if (!isExternalProviderId(providerId) || !isExternalProviderEnabled(c.env, providerId)) {
+    return c.json({ error: "该登录方式暂不可用" }, 404);
+  }
+
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const mode = body.mode === "link" ? "link" : "login";
+  const user = c.get("user");
+  if (mode === "link" && !user) return c.json({ error: "未授权" }, 401);
+
+  const state = randomOAuthValue();
+  const verifier = randomOAuthValue(48);
+  const nonce = randomOAuthValue();
+  const redirect = mode === "link" ? "/settings" : sanitizeInternalRedirect(body.redirect);
+  const flow: ExternalFlowState = {
+    provider: providerId,
+    verifier,
+    nonce,
+    redirect,
+    mode,
+    userId: mode === "link" ? user.id : undefined,
+    createdAt: Date.now(),
+  };
+  await c.env.KV.put(`external:flow:${state}`, JSON.stringify(flow), {
+    expirationTtl: EXTERNAL_FLOW_TTL,
+  });
+
+  const callbackUrl = externalCallbackUrl(c.req.url, providerId);
+  const challenge = await createPKCEChallenge(verifier);
+  return c.json({
+    authorization_url: buildAuthorizationUrl(
+      c.env,
+      providerId,
+      callbackUrl,
+      state,
+      challenge,
+      nonce,
+    ),
+  });
+});
+
+apiRouter.get("/auth/external/:provider/callback", async (c) => {
+  const providerId = c.req.param("provider");
+  const state = c.req.query("state") || "";
+  if (!isExternalProviderId(providerId) || !state) {
+    return c.redirect(externalErrorRedirect("登录请求无效"));
+  }
+
+  const key = `external:flow:${state}`;
+  const raw = await c.env.KV.get(key);
+  if (!raw) return c.redirect(externalErrorRedirect("登录请求已失效，请重试"));
+  await c.env.KV.delete(key);
+
+  let flow: ExternalFlowState;
+  try {
+    flow = JSON.parse(raw) as ExternalFlowState;
+  } catch {
+    return c.redirect(externalErrorRedirect("登录请求无效"));
+  }
+  if (
+    flow.provider !== providerId ||
+    Date.now() - flow.createdAt > EXTERNAL_FLOW_TTL * 1000
+  ) {
+    return c.redirect(externalErrorRedirect("登录请求无效", flow.mode));
+  }
+  if (c.req.query("error")) {
+    return c.redirect(externalErrorRedirect("第三方授权已取消", flow.mode));
+  }
+  const code = c.req.query("code");
+  if (!code) return c.redirect(externalErrorRedirect("第三方未返回授权码", flow.mode));
+
+  try {
+    const callbackUrl = externalCallbackUrl(c.req.url, providerId);
+    const token = await exchangeAuthorizationCode(
+      c.env,
+      providerId,
+      code,
+      flow.verifier,
+      callbackUrl,
+    );
+    const identity = await resolveExternalIdentity(
+      c.env,
+      providerId,
+      token.accessToken,
+      token.idToken,
+      flow.nonce,
+    );
+
+    const linked = await c.env.DB.prepare(
+      "SELECT user_id FROM oauth_accounts WHERE provider = ? AND provider_user_id = ?",
+    ).bind(providerId, identity.subject).first();
+
+    if (flow.mode === "link") {
+      if (!flow.userId) return c.redirect(externalErrorRedirect("绑定请求无效", "link"));
+      if (linked && linked.user_id !== flow.userId) {
+        return c.redirect(externalErrorRedirect("该第三方账号已绑定其他 SEKAI Pass 账号", "link"));
+      }
+      if (!linked) {
+        await c.env.DB.prepare(
+          "INSERT INTO oauth_accounts (provider, provider_user_id, user_id, created_at) VALUES (?, ?, ?, ?)",
+        ).bind(providerId, identity.subject, flow.userId, Date.now()).run();
+      }
+      return c.redirect(`/settings?external=linked&provider=${encodeURIComponent(providerId)}`);
+    }
+
+    if (linked) {
+      const ticket = await createExternalSession(c, String(linked.user_id), flow.redirect);
+      return c.redirect(`/external/complete?ticket=${encodeURIComponent(ticket)}`);
+    }
+
+    const ticket = randomOAuthValue();
+    const pending: ExternalPendingState = { identity, redirect: flow.redirect, createdAt: Date.now() };
+    await c.env.KV.put(`external:pending:${ticket}`, JSON.stringify(pending), {
+      expirationTtl: EXTERNAL_FLOW_TTL,
+    });
+    return c.redirect(`/external/complete?ticket=${encodeURIComponent(ticket)}`);
+  } catch (error) {
+    console.error(`External auth callback failed (${providerId}):`, error);
+    return c.redirect(externalErrorRedirect("第三方登录失败，请重试", flow.mode));
+  }
+});
+
+apiRouter.get("/auth/external/pending", async (c) => {
+  const ticket = c.req.query("ticket") || "";
+  if (!ticket) return c.json({ error: "登录票据无效" }, 400);
+  const raw = await c.env.KV.get(`external:pending:${ticket}`);
+  if (!raw) return c.json({ error: "登录票据已失效，请重新登录" }, 410);
+  const pending = JSON.parse(raw) as ExternalPendingState;
+  if (Date.now() - pending.createdAt > EXTERNAL_FLOW_TTL * 1000) {
+    return c.json({ error: "登录票据已失效，请重新登录" }, 410);
+  }
+  const provider = getExternalProvider(pending.identity.provider);
+  return c.json({
+    needs_profile: true,
+    provider: { id: provider.id, name: provider.name, icon: provider.icon },
+    profile: {
+      email: pending.identity.email,
+      email_verified: pending.identity.emailVerified,
+      display_name: pending.identity.displayName,
+      avatar_url: pending.identity.avatarUrl,
+    },
+  }, 200, { "Cache-Control": "no-store" });
+});
+
+apiRouter.post("/auth/external/handoff", async (c) => {
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const ticket = typeof body.ticket === "string" ? body.ticket : "";
+  if (!ticket) return c.json({ error: "登录票据无效" }, 400);
+  const key = `external:handoff:${ticket}`;
+  const raw = await c.env.KV.get(key);
+  if (!raw) return c.json({ error: "登录票据已失效，请重新登录" }, 410);
+  await c.env.KV.delete(key);
+
+  const handoff = JSON.parse(raw) as { sessionId: string; redirect: string };
+  const lucia = initializeLucia(c.env.DB);
+  const { session, user } = await lucia.validateSession(handoff.sessionId);
+  if (!session || !user) return c.json({ error: "登录会话无效" }, 401);
+  return c.json({
+    token: session.id,
+    redirect: sanitizeInternalRedirect(handoff.redirect),
+  }, 200, { "Cache-Control": "no-store", Pragma: "no-cache" });
+});
+
+apiRouter.post("/auth/external/complete", async (c) => {
+  try {
+    const body = await c.req.json() as Record<string, any>;
+    const ticket = typeof body.ticket === "string" ? body.ticket : "";
+    const username = typeof body.username === "string" ? body.username.trim() : "";
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    if (!ticket || !username || !email || body.agree_terms !== true) {
+      return c.json({ error: "请填写完整资料并同意服务协议" }, 400);
+    }
+    if (username.length > 50 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return c.json({ error: "用户名或邮箱格式无效" }, 400);
+    }
+
+    const captchaError = await verifyCaptcha(
+      body,
+      c.env.KV,
+      c.env.TURNSTILE_SECRET_KEY,
+      c.env.HCAPTCHA_SECRET_KEY,
+      "hcaptcha",
+      clientIp(c),
+    );
+    if (captchaError) return c.json({ error: captchaError }, 400);
+
+    const pendingKey = `external:pending:${ticket}`;
+    const raw = await c.env.KV.get(pendingKey);
+    if (!raw) return c.json({ error: "登录票据已失效，请重新登录" }, 410);
+    const pending = JSON.parse(raw) as ExternalPendingState;
+    if (Date.now() - pending.createdAt > EXTERNAL_FLOW_TTL * 1000) {
+      return c.json({ error: "登录票据已失效，请重新登录" }, 410);
+    }
+
+    const existingAccount = await c.env.DB.prepare(
+      "SELECT user_id FROM oauth_accounts WHERE provider = ? AND provider_user_id = ?",
+    ).bind(pending.identity.provider, pending.identity.subject).first();
+    if (existingAccount) return c.json({ error: "该第三方账号已绑定，请重新登录" }, 409);
+
+    const existingUser = await c.env.DB.prepare(
+      "SELECT id FROM users WHERE username = ? OR email = ?",
+    ).bind(username, email).first();
+    if (existingUser) {
+      return c.json({ error: "用户名或邮箱已被使用，请先登录已有账号后绑定" }, 409);
+    }
+
+    const userId = generateId();
+    const unusablePassword = await hashPassword(randomOAuthValue(48));
+    const now = Date.now();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO users
+          (id, username, email, hashed_password, password_login_enabled, display_name, avatar_url, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+      ).bind(
+        userId,
+        username,
+        email,
+        unusablePassword,
+        pending.identity.displayName,
+        pending.identity.avatarUrl,
+        now,
+        now,
+      ),
+      c.env.DB.prepare(
+        "INSERT INTO oauth_accounts (provider, provider_user_id, user_id, created_at) VALUES (?, ?, ?, ?)",
+      ).bind(pending.identity.provider, pending.identity.subject, userId, now),
+    ]);
+    await c.env.KV.delete(pendingKey);
+
+    const sessionTicket = await createExternalSession(c, userId, pending.redirect);
+    return c.json({ handoff_ticket: sessionTicket }, 201, { "Cache-Control": "no-store" });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return c.json({ error: "用户名、邮箱或第三方账号已被使用" }, 409);
+    }
+    console.error("External account completion failed:", error);
+    return c.json({ error: "创建账号失败，请重试" }, 500);
+  }
+});
+
+apiRouter.get("/auth/external/accounts", async (c) => {
+  const user = c.get("user");
+  if (!user) return c.json({ error: "未授权" }, 401);
+  const [accountResult, localUser] = await Promise.all([
+    c.env.DB.prepare(
+      "SELECT provider, created_at FROM oauth_accounts WHERE user_id = ? ORDER BY created_at",
+    ).bind(user.id).all(),
+    c.env.DB.prepare(
+      "SELECT password_login_enabled FROM users WHERE id = ?",
+    ).bind(user.id).first(),
+  ]);
+  const enabled = new Set(listEnabledExternalProviders(c.env).map((item) => item.id));
+  const accounts = accountResult.results.map((row) => {
+    const id = String(row.provider);
+    if (!isExternalProviderId(id)) return null;
+    const provider = getExternalProvider(id);
+    return {
+      id,
+      name: provider.name,
+      icon: provider.icon,
+      available: enabled.has(id),
+      created_at: row.created_at,
+    };
+  }).filter(Boolean);
+  return c.json({
+    password_login_enabled: localUser?.password_login_enabled !== 0,
+    accounts,
+    providers: listEnabledExternalProviders(c.env),
+  }, 200, { "Cache-Control": "no-store" });
+});
+
+apiRouter.delete("/auth/external/accounts/:provider", async (c) => {
+  const user = c.get("user");
+  if (!user) return c.json({ error: "未授权" }, 401);
+  const providerId = c.req.param("provider");
+  if (!isExternalProviderId(providerId)) return c.json({ error: "登录方式无效" }, 400);
+
+  const [localUser, accounts] = await Promise.all([
+    c.env.DB.prepare("SELECT password_login_enabled FROM users WHERE id = ?").bind(user.id).first(),
+    c.env.DB.prepare("SELECT provider FROM oauth_accounts WHERE user_id = ?").bind(user.id).all(),
+  ]);
+  const hasPassword = localUser?.password_login_enabled !== 0;
+  if (!hasPassword && accounts.results.length <= 1) {
+    return c.json({ error: "必须保留至少一种登录方式" }, 409);
+  }
+  await c.env.DB.prepare(
+    "DELETE FROM oauth_accounts WHERE user_id = ? AND provider = ?",
+  ).bind(user.id, providerId).run();
+  return c.json({ success: true });
+});
+
 // Login endpoint
 apiRouter.post("/auth/login", async (c) => {
   try {
@@ -465,6 +828,10 @@ apiRouter.post("/auth/login", async (c) => {
 
     if (!result) {
       return c.json({ error: "用户名或密码错误" }, 400);
+    }
+
+    if (result.password_login_enabled === 0) {
+      return c.json({ error: "该账号未启用密码登录，请使用已绑定的第三方账号" }, 400);
     }
 
     const validPassword = await verifyPassword(password, result.hashed_password as string);

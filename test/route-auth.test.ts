@@ -45,6 +45,11 @@ const PUBLIC = new Map<string, string>([
   ["POST /challenge/report", "登录前的人机校验；靠 KV 里的 challengeId + IP 绑定"],
   ["GET /config", "只返回验证码 site key —— site key 本来就要放进页面"],
   ["GET /oauth/config", "只返回端点 URL，与 discovery 同性质"],
+  ["GET /auth/external/providers", "只返回已启用 provider 的公开名称和本地图标"],
+  ["GET /auth/external/:provider/callback", "OAuth 回调靠短期 state、PKCE 与 nonce 验证"],
+  ["GET /auth/external/pending", "首次登录补全页凭短期随机票据读取有限资料"],
+  ["POST /auth/external/handoff", "凭单次短期票据换取已创建的本站会话"],
+  ["POST /auth/external/complete", "首次第三方注册靠短期票据与 hCaptcha 保护"],
   [
     "GET /.well-known/oauth-authorization-server",
     "RFC 8414 要求公开",

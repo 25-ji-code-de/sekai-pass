@@ -34,8 +34,9 @@ import { revokeToken } from "./lib/revoke.ts";
 import { authenticateClient } from "./lib/client-auth.ts";
 import * as html from "./lib/html.ts";
 import { apiRouter } from "./lib/api.ts";
+import type { ExternalAuthEnv } from "./lib/external-auth.ts";
 
-type Bindings = {
+type Bindings = ExternalAuthEnv & {
   DB: D1Database;
   KV: KVNamespace;
   TURNSTILE_SECRET_KEY: string;

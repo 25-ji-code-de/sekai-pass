@@ -103,7 +103,35 @@ npx wrangler secret put TURNSTILE_SECRET_KEY
 npx wrangler secret put HCAPTCHA_SECRET_KEY
 ```
 
-### 7. 本地开发
+### 7. 配置第三方登录（可选）
+
+SEKAI Pass 支持 Google、Microsoft、GitHub、X 和 Linux DO。
+每个 provider 都需要在其控制台登记回调地址：
+
+```text
+https://<你的域名>/api/auth/external/<provider>/callback
+```
+
+将公开 Client ID 设置为 GitHub Actions Variables（或本地 `wrangler.toml` 的 `[vars]`）：
+`GOOGLE_CLIENT_ID`、`MICROSOFT_CLIENT_ID`、`GITHUB_CLIENT_ID`、`X_CLIENT_ID`、
+`LINUXDO_CLIENT_ID`。对应的 Client Secret 只作为 Worker secret 上传；没有同时配置
+ID 与 Secret 的 provider 会自动从登录页隐藏：
+
+```bash
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+npx wrangler secret put MICROSOFT_CLIENT_SECRET
+npx wrangler secret put GITHUB_CLIENT_SECRET
+npx wrangler secret put X_CLIENT_SECRET
+npx wrangler secret put LINUXDO_CLIENT_SECRET
+```
+
+首次启用第三方登录前执行新增的数据库迁移：
+
+```bash
+npm run migrate -- --remote
+```
+
+### 8. 本地开发
 
 ```bash
 npm run dev
@@ -111,7 +139,7 @@ npm run dev
 
 在浏览器中打开 `http://localhost:8787`。
 
-### 7. 部署
+### 9. 部署
 
 ```bash
 npm run deploy

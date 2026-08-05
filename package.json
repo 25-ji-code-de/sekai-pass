@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "hono": "^4.0.0",
+    "jose": "^6.2.8",
     "lucia": "^3.2.0"
   },
   "devDependencies": {

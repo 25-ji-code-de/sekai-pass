@@ -4,10 +4,13 @@
 # 需要在 Cloudflare Dashboard 配置以下环境变量：
 #   TURNSTILE_SITE_KEY   — Turnstile site key
 #   HCAPTCHA_SITE_KEY    — hCaptcha site key（仅注册页使用）
+#   GOOGLE_CLIENT_ID / MICROSOFT_CLIENT_ID / GITHUB_CLIENT_ID
+#   X_CLIENT_ID / LINUXDO_CLIENT_ID — 第三方登录公开 Client ID；留空即隐藏该 provider
 #   D1_DATABASE_ID       — sekai_pass_db 的 database ID
 #   KV_NAMESPACE_ID      — OIDC_KEYS KV namespace ID
 #   KV_PREVIEW_ID        — OIDC_KEYS preview KV namespace ID
-# 真正的 secret（TURNSTILE_SECRET_KEY 等）通过 `wrangler secret` 管理，不在此文件中
+# 真正的 secret（TURNSTILE_SECRET_KEY、HCAPTCHA_SECRET_KEY 以及各 provider 的
+# *_CLIENT_SECRET）通过 `wrangler secret` 管理，不在此文件中
 
 name = "sekai-pass"
 main = "src/index.ts"
@@ -18,6 +21,11 @@ compatibility_flags = ["nodejs_compat"]
 ENVIRONMENT = "production"
 TURNSTILE_SITE_KEY = "${TURNSTILE_SITE_KEY}"
 HCAPTCHA_SITE_KEY = "${HCAPTCHA_SITE_KEY}"
+GOOGLE_CLIENT_ID = "${GOOGLE_CLIENT_ID}"
+MICROSOFT_CLIENT_ID = "${MICROSOFT_CLIENT_ID}"
+GITHUB_CLIENT_ID = "${GITHUB_CLIENT_ID}"
+X_CLIENT_ID = "${X_CLIENT_ID}"
+LINUXDO_CLIENT_ID = "${LINUXDO_CLIENT_ID}"
 
 # Static assets configuration
 [assets]

@@ -5,6 +5,7 @@ import {
   createPKCEChallenge,
   isExternalProviderEnabled,
   listEnabledExternalProviders,
+  sanitizeExternalLoginRedirect,
   sanitizeInternalRedirect,
 } from "../src/lib/external-auth.ts";
 
@@ -27,6 +28,14 @@ describe("external auth flow values", () => {
     assert.equal(sanitizeInternalRedirect("https://attacker.example/"), "/");
     assert.equal(sanitizeInternalRedirect("//attacker.example/"), "/");
     assert.equal(sanitizeInternalRedirect("javascript:alert(1)"), "/");
+  });
+
+  test("login redirects cannot target protocol callbacks", () => {
+    assert.equal(
+      sanitizeExternalLoginRedirect("/api/auth/external/linuxdo/callback?code=one&state=two"),
+      "/",
+    );
+    assert.equal(sanitizeExternalLoginRedirect("/settings"), "/settings");
   });
 
   test("PKCE challenge is RFC 7636 base64url", async () => {

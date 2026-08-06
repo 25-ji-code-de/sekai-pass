@@ -31,7 +31,10 @@ LINUXDO_CLIENT_ID = "${LINUXDO_CLIENT_ID}"
 [assets]
 directory = "public"
 binding = "ASSETS"
+html_handling = "none"
 not_found_handling = "single-page-application"
+# Protocol and API routes must reach the Worker before SPA asset fallback.
+run_worker_first = true
 
 [[d1_databases]]
 binding = "DB"

@@ -165,6 +165,15 @@ export function sanitizeInternalRedirect(value: unknown): string {
   }
 }
 
+// Browser login flows must never return to a protocol callback or API route.
+// Those URLs contain one-time credentials and are not user-facing destinations.
+export function sanitizeExternalLoginRedirect(value: unknown): string {
+  const redirect = sanitizeInternalRedirect(value);
+  const path = new URL(redirect, "https://sekai-pass.invalid").pathname;
+  if (path.startsWith("/api/") || path === "/oauth/authorize") return "/";
+  return redirect;
+}
+
 export function buildAuthorizationUrl(
   env: ExternalAuthEnv,
   id: ExternalProviderId,

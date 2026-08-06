@@ -45,6 +45,7 @@ import {
   listEnabledExternalProviders,
   randomOAuthValue,
   resolveExternalIdentity,
+  sanitizeExternalLoginRedirect,
   sanitizeInternalRedirect,
   type ExternalAuthEnv,
   type ExternalIdentity,
@@ -497,6 +498,14 @@ apiRouter.use("*", async (c, next) => {
   await next();
 });
 
+// OAuth callback and handoff responses contain one-time credentials and must
+// never be cached by an edge or browser.
+apiRouter.use("/auth/external/*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store");
+  c.header("CDN-Cache-Control", "no-store");
+});
+
 // Enabled upstream providers only. Client ids and secrets are never returned.
 apiRouter.get("/auth/external/providers", async (c) => {
   return c.json({ providers: listEnabledExternalProviders(c.env) }, 200, {
@@ -519,7 +528,7 @@ apiRouter.post("/auth/external/:provider/start", async (c) => {
   const state = randomOAuthValue();
   const verifier = randomOAuthValue(48);
   const nonce = randomOAuthValue();
-  const redirect = mode === "link" ? "/settings" : sanitizeInternalRedirect(body.redirect);
+  const redirect = mode === "link" ? "/settings" : sanitizeExternalLoginRedirect(body.redirect);
   const flow: ExternalFlowState = {
     provider: providerId,
     verifier,
@@ -657,16 +666,22 @@ apiRouter.post("/auth/external/handoff", async (c) => {
   const key = `external:handoff:${ticket}`;
   const raw = await c.env.KV.get(key);
   if (!raw) return c.json({ error: "登录票据已失效，请重新登录" }, 410);
-  await c.env.KV.delete(key);
-
   const handoff = JSON.parse(raw) as { sessionId: string; redirect: string };
   const lucia = initializeLucia(c.env.DB);
-  const { session, user } = await lucia.validateSession(handoff.sessionId);
+  let session;
+  let user;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    ({ session, user } = await lucia.validateSession(handoff.sessionId));
+    if (session && user) break;
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+  }
   if (!session || !user) return c.json({ error: "登录会话无效" }, 401);
-  return c.json({
+  const response = c.json({
     token: session.id,
     redirect: sanitizeInternalRedirect(handoff.redirect),
   }, 200, { "Cache-Control": "no-store", Pragma: "no-cache" });
+  await c.env.KV.delete(key);
+  return response;
 });
 
 apiRouter.post("/auth/external/complete", async (c) => {

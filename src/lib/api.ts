@@ -21,6 +21,15 @@ import { initializeLucia } from "./auth.ts";
 import { hashPassword, verifyPassword, generateId } from "./password.ts";
 import { decryptPassword, validateRequest } from "./decrypt.ts";
 import { getCaptchaProvider } from "./captcha-provider.ts";
+import {
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+  type AuthenticationResponseJSON,
+  type Base64URLString,
+  type RegistrationResponseJSON,
+} from "@simplewebauthn/server";
 import { createChallengeState, generatePoWChallenge, verifyPoWHash, POW_DIFFICULTY, POW_DIFFICULTY_STRICT, type ChallengeState } from "./pow.ts";
 import { validateScopeParameter, formatScopes } from "./scope.ts";
 import { isOIDCRequest } from "./oidc-scope.ts";
@@ -60,6 +69,21 @@ import {
   KEY_STATUSES,
   type KeyStatus,
 } from "./client-keys.ts";
+import {
+  bytesToBase64URL,
+  encodeUserHandle,
+  getPasskeyRP,
+  isPasskeyChallengeFresh,
+  MAX_PASSKEYS_PER_USER,
+  normalizePasskeyName,
+  parsePasskeyChallenge,
+  parseTransports,
+  PASSKEY_CHALLENGE_TTL,
+  serializeTransports,
+  toWebAuthnCredential,
+  type PasskeyChallengeState,
+  type StoredPasskeyRow,
+} from "./passkeys.ts";
 
 type Bindings = ExternalAuthEnv & {
   DB: D1Database;
@@ -506,6 +530,12 @@ apiRouter.use("/auth/external/*", async (c, next) => {
   c.header("CDN-Cache-Control", "no-store");
 });
 
+apiRouter.use("/auth/passkeys/*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store");
+  c.header("CDN-Cache-Control", "no-store");
+});
+
 // Enabled upstream providers only. Client ids and secrets are never returned.
 apiRouter.get("/auth/external/providers", async (c) => {
   return c.json({ providers: listEnabledExternalProviders(c.env) }, 200, {
@@ -801,17 +831,307 @@ apiRouter.delete("/auth/external/accounts/:provider", async (c) => {
   const providerId = c.req.param("provider");
   if (!isExternalProviderId(providerId)) return c.json({ error: "登录方式无效" }, 400);
 
-  const [localUser, accounts] = await Promise.all([
+  const [localUser, accounts, passkeyCount] = await Promise.all([
     c.env.DB.prepare("SELECT hashed_password FROM users WHERE id = ?").bind(user.id).first(),
     c.env.DB.prepare("SELECT provider FROM oauth_accounts WHERE user_id = ?").bind(user.id).all(),
+    c.env.DB.prepare("SELECT COUNT(*) AS count FROM passkeys WHERE user_id = ?")
+      .bind(user.id).first<{ count: number }>(),
   ]);
   const hasPassword = !String(localUser?.hashed_password || "").startsWith("!external:");
-  if (!hasPassword && accounts.results.length <= 1) {
+  if (!hasPassword && accounts.results.length <= 1 && Number(passkeyCount?.count || 0) === 0) {
     return c.json({ error: "必须保留至少一种登录方式" }, 409);
   }
   await c.env.DB.prepare(
     "DELETE FROM oauth_accounts WHERE user_id = ? AND provider = ?",
   ).bind(user.id, providerId).run();
+  return c.json({ success: true });
+});
+
+apiRouter.post("/auth/passkeys/register/options", async (c) => {
+  const user = c.get("user");
+  if (!user) return c.json({ error: "未授权" }, 401);
+
+  const [localUser, existing] = await Promise.all([
+    c.env.DB.prepare(
+      "SELECT username, display_name FROM users WHERE id = ?",
+    ).bind(user.id).first(),
+    c.env.DB.prepare(
+      "SELECT credential_id, transports FROM passkeys WHERE user_id = ? ORDER BY created_at",
+    ).bind(user.id).all(),
+  ]);
+  if (!localUser) return c.json({ error: "账号不存在" }, 404);
+  if (existing.results.length >= MAX_PASSKEYS_PER_USER) {
+    return c.json({ error: `最多添加 ${MAX_PASSKEYS_PER_USER} 个通行密钥` }, 409);
+  }
+
+  const rp = getPasskeyRP(c.req.url);
+  const options = await generateRegistrationOptions({
+    rpName: rp.rpName,
+    rpID: rp.rpID,
+    userID: Uint8Array.from(new TextEncoder().encode(user.id)),
+    userName: String(localUser.username),
+    userDisplayName: String(localUser.display_name || localUser.username),
+    attestationType: "none",
+    excludeCredentials: existing.results.map((row) => ({
+      id: String(row.credential_id) as Base64URLString,
+      transports: parseTransports(row.transports),
+    })),
+    authenticatorSelection: {
+      residentKey: "required",
+      userVerification: "required",
+    },
+    preferredAuthenticatorType: "localDevice",
+  });
+  const flowId = randomOAuthValue();
+  const flow: PasskeyChallengeState = {
+    challenge: options.challenge,
+    userId: user.id,
+    rpID: rp.rpID,
+    origin: rp.origin,
+    createdAt: Date.now(),
+  };
+  await c.env.KV.put(`passkey:registration:${flowId}`, JSON.stringify(flow), {
+    expirationTtl: PASSKEY_CHALLENGE_TTL,
+  });
+  return c.json({ flow_id: flowId, options });
+});
+
+apiRouter.post("/auth/passkeys/register/verify", async (c) => {
+  const user = c.get("user");
+  if (!user) return c.json({ error: "未授权" }, 401);
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const flowId = typeof body.flow_id === "string" ? body.flow_id : "";
+  const name = normalizePasskeyName(body.name);
+  const response = body.response;
+  if (!flowId || !name || !response || typeof response !== "object") {
+    return c.json({ error: "通行密钥数据无效" }, 400);
+  }
+
+  const key = `passkey:registration:${flowId}`;
+  const state = parsePasskeyChallenge(await c.env.KV.get(key), true);
+  await c.env.KV.delete(key);
+  const currentRP = getPasskeyRP(c.req.url);
+  if (
+    !state ||
+    !isPasskeyChallengeFresh(state) ||
+    state.userId !== user.id ||
+    state.rpID !== currentRP.rpID ||
+    state.origin !== currentRP.origin
+  ) {
+    return c.json({ error: "注册请求已失效，请重试" }, 410);
+  }
+
+  try {
+    const verification = await verifyRegistrationResponse({
+      response: response as RegistrationResponseJSON,
+      expectedChallenge: state.challenge,
+      expectedOrigin: state.origin,
+      expectedRPID: state.rpID,
+      requireUserVerification: true,
+    });
+    if (!verification.verified || !verification.registrationInfo) {
+      return c.json({ error: "无法验证通行密钥" }, 400);
+    }
+
+    const info = verification.registrationInfo;
+    const now = Date.now();
+    const currentCount = await c.env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM passkeys WHERE user_id = ?",
+    ).bind(user.id).first<{ count: number }>();
+    if (Number(currentCount?.count || 0) >= MAX_PASSKEYS_PER_USER) {
+      return c.json({ error: `最多添加 ${MAX_PASSKEYS_PER_USER} 个通行密钥` }, 409);
+    }
+    await c.env.DB.prepare(
+      `INSERT INTO passkeys
+        (credential_id, user_id, public_key, counter, transports, device_type, backed_up, name, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      info.credential.id,
+      user.id,
+      bytesToBase64URL(info.credential.publicKey),
+      info.credential.counter,
+      serializeTransports(info.credential.transports),
+      info.credentialDeviceType,
+      info.credentialBackedUp ? 1 : 0,
+      name,
+      now,
+    ).run();
+    return c.json({
+      passkey: {
+        credential_id: info.credential.id,
+        name,
+        created_at: now,
+        last_used_at: null,
+        backed_up: info.credentialBackedUp,
+      },
+    }, 201);
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return c.json({ error: "该通行密钥已经添加" }, 409);
+    }
+    console.error("Passkey registration failed:", error);
+    return c.json({ error: "无法验证通行密钥，请重试" }, 400);
+  }
+});
+
+apiRouter.post("/auth/passkeys/login/options", async (c) => {
+  const rp = getPasskeyRP(c.req.url);
+  const options = await generateAuthenticationOptions({
+    rpID: rp.rpID,
+    userVerification: "required",
+  });
+  const flowId = randomOAuthValue();
+  const flow: PasskeyChallengeState = {
+    challenge: options.challenge,
+    rpID: rp.rpID,
+    origin: rp.origin,
+    createdAt: Date.now(),
+  };
+  await c.env.KV.put(`passkey:authentication:${flowId}`, JSON.stringify(flow), {
+    expirationTtl: PASSKEY_CHALLENGE_TTL,
+  });
+  return c.json({ flow_id: flowId, options });
+});
+
+apiRouter.post("/auth/passkeys/login/verify", async (c) => {
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const flowId = typeof body.flow_id === "string" ? body.flow_id : "";
+  const response = body.response;
+  if (!flowId || !response || typeof response !== "object") {
+    return c.json({ error: "通行密钥数据无效" }, 400);
+  }
+
+  const key = `passkey:authentication:${flowId}`;
+  const state = parsePasskeyChallenge(await c.env.KV.get(key), false);
+  await c.env.KV.delete(key);
+  const currentRP = getPasskeyRP(c.req.url);
+  if (
+    !state ||
+    !isPasskeyChallengeFresh(state) ||
+    state.rpID !== currentRP.rpID ||
+    state.origin !== currentRP.origin
+  ) {
+    return c.json({ error: "登录请求已失效，请重试" }, 410);
+  }
+
+  const authenticationResponse = response as AuthenticationResponseJSON;
+  const credentialId = typeof authenticationResponse.id === "string"
+    ? authenticationResponse.id
+    : "";
+  if (!credentialId) return c.json({ error: "无法验证通行密钥" }, 400);
+
+  const row = await c.env.DB.prepare(
+    `SELECT passkeys.*, users.username, users.email, users.display_name
+     FROM passkeys INNER JOIN users ON users.id = passkeys.user_id
+     WHERE passkeys.credential_id = ?`,
+  ).bind(credentialId).first();
+  if (!row) return c.json({ error: "无法验证通行密钥" }, 400);
+
+  const userHandle = authenticationResponse.response?.userHandle;
+  if (!userHandle || userHandle !== encodeUserHandle(String(row.user_id))) {
+    return c.json({ error: "无法验证通行密钥" }, 400);
+  }
+
+  try {
+    const stored = row as StoredPasskeyRow & Record<string, unknown>;
+    const verification = await verifyAuthenticationResponse({
+      response: authenticationResponse,
+      expectedChallenge: state.challenge,
+      expectedOrigin: state.origin,
+      expectedRPID: state.rpID,
+      credential: toWebAuthnCredential(stored),
+      requireUserVerification: true,
+    });
+    if (!verification.verified) return c.json({ error: "无法验证通行密钥" }, 400);
+
+    const now = Date.now();
+    await c.env.DB.prepare(
+      "UPDATE passkeys SET counter = ?, last_used_at = ? WHERE credential_id = ?",
+    ).bind(
+      verification.authenticationInfo.newCounter,
+      now,
+      credentialId,
+    ).run();
+
+    const lucia = initializeLucia(c.env.DB);
+    const session = await lucia.createSession(String(row.user_id), {});
+    const sessionCookie = lucia.createSessionCookie(session.id);
+    setCookie(c, sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
+    return c.json({
+      success: true,
+      token: session.id,
+      user: {
+        id: row.user_id,
+        username: row.username,
+        email: row.email,
+        display_name: row.display_name,
+      },
+    }, 200, { "Cache-Control": "no-store", Pragma: "no-cache" });
+  } catch (error) {
+    console.error("Passkey authentication failed:", error);
+    return c.json({ error: "无法验证通行密钥，请重试" }, 400);
+  }
+});
+
+apiRouter.get("/auth/passkeys", async (c) => {
+  const user = c.get("user");
+  if (!user) return c.json({ error: "未授权" }, 401);
+  const result = await c.env.DB.prepare(
+    `SELECT credential_id, name, device_type, backed_up, created_at, last_used_at
+     FROM passkeys WHERE user_id = ? ORDER BY created_at`,
+  ).bind(user.id).all();
+  return c.json({
+    passkeys: result.results.map((row) => ({
+      credential_id: row.credential_id,
+      name: row.name,
+      device_type: row.device_type,
+      backed_up: Boolean(row.backed_up),
+      created_at: row.created_at,
+      last_used_at: row.last_used_at,
+    })),
+    max_passkeys: MAX_PASSKEYS_PER_USER,
+  });
+});
+
+apiRouter.patch("/auth/passkeys/:credentialId", async (c) => {
+  const user = c.get("user");
+  if (!user) return c.json({ error: "未授权" }, 401);
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const name = normalizePasskeyName(body.name);
+  if (!name) return c.json({ error: "通行密钥名称须为 1 至 50 个字符" }, 400);
+  const result = await c.env.DB.prepare(
+    "UPDATE passkeys SET name = ? WHERE credential_id = ? AND user_id = ?",
+  ).bind(name, c.req.param("credentialId"), user.id).run();
+  if (!result.meta.changes) return c.json({ error: "通行密钥不存在" }, 404);
+  return c.json({ success: true, name });
+});
+
+apiRouter.delete("/auth/passkeys/:credentialId", async (c) => {
+  const user = c.get("user");
+  if (!user) return c.json({ error: "未授权" }, 401);
+  const credentialId = c.req.param("credentialId");
+  const [passkey, localUser, oauthCount, passkeyCount] = await Promise.all([
+    c.env.DB.prepare(
+      "SELECT credential_id FROM passkeys WHERE credential_id = ? AND user_id = ?",
+    ).bind(credentialId, user.id).first(),
+    c.env.DB.prepare("SELECT hashed_password FROM users WHERE id = ?").bind(user.id).first(),
+    c.env.DB.prepare("SELECT COUNT(*) AS count FROM oauth_accounts WHERE user_id = ?")
+      .bind(user.id).first<{ count: number }>(),
+    c.env.DB.prepare("SELECT COUNT(*) AS count FROM passkeys WHERE user_id = ?")
+      .bind(user.id).first<{ count: number }>(),
+  ]);
+  if (!passkey) return c.json({ error: "通行密钥不存在" }, 404);
+  const hasPassword = !String(localUser?.hashed_password || "").startsWith("!external:");
+  if (
+    !hasPassword &&
+    Number(oauthCount?.count || 0) === 0 &&
+    Number(passkeyCount?.count || 0) <= 1
+  ) {
+    return c.json({ error: "必须保留至少一种登录方式" }, 409);
+  }
+  await c.env.DB.prepare(
+    "DELETE FROM passkeys WHERE credential_id = ? AND user_id = ?",
+  ).bind(credentialId, user.id).run();
   return c.json({ success: true });
 });
 

@@ -50,6 +50,8 @@ const PUBLIC = new Map<string, string>([
   ["GET /auth/external/pending", "首次登录补全页凭短期随机票据读取有限资料"],
   ["POST /auth/external/handoff", "凭单次短期票据换取已创建的本站会话"],
   ["POST /auth/external/complete", "首次第三方注册靠短期票据与 hCaptcha 保护"],
+  ["POST /auth/passkeys/login/options", "登录前只生成短期 WebAuthn challenge，不读取账号数据"],
+  ["POST /auth/passkeys/login/verify", "登录前只接受一次性 challenge 和服务器验证的凭据"],
   [
     "GET /.well-known/oauth-authorization-server",
     "RFC 8414 要求公开",

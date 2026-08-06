@@ -44,7 +44,8 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "hono": "^4.0.0",
+    "@simplewebauthn/server": "^13.3.2",
+    "hono": "^4.13.0",
     "jose": "^6.2.8",
     "lucia": "^3.2.0"
   },

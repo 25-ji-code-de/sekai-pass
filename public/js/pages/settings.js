@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { showError, showSuccess, setLoading } from '../utils.js';
 import { FileUploadService } from '../file-upload.js';
+import { isPasskeySupported, startPasskeyRegistration } from '../webauthn.js';
 
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -90,6 +91,7 @@ export async function renderSettings(app, api, navigate) {
       <section class="settings-login-methods" aria-labelledby="login-methods-title">
         <div class="settings-section-head">
           <h3 id="login-methods-title">登录方式</h3>
+          <button type="button" id="add-passkey-btn" class="btn-link">添加通行密钥</button>
         </div>
         <div id="login-methods-list" class="login-methods-list">
           <div class="external-complete-loading">正在加载...</div>
@@ -187,9 +189,10 @@ export async function renderSettings(app, api, navigate) {
   async function loadLoginMethods() {
     const list = document.getElementById('login-methods-list');
     try {
-      const data = await api.get('/auth/external/accounts', {
-        headers: api.getAuthHeaders()
-      });
+      const [data, passkeyData] = await Promise.all([
+        api.get('/auth/external/accounts', { headers: api.getAuthHeaders() }),
+        api.get('/auth/passkeys', { headers: api.getAuthHeaders() }),
+      ]);
       list.replaceChildren();
 
       if (data.password_login_enabled) {
@@ -197,6 +200,71 @@ export async function renderSettings(app, api, navigate) {
         passwordRow.className = 'login-method-row';
         passwordRow.innerHTML = '<div class="login-method-icon login-method-password" aria-hidden="true">••</div><div class="login-method-name"><strong>密码</strong><span>已启用</span></div><span class="login-method-status">已连接</span>';
         list.appendChild(passwordRow);
+      }
+
+      for (const passkey of passkeyData.passkeys || []) {
+        const row = document.createElement('div');
+        row.className = 'login-method-row';
+
+        const icon = document.createElement('div');
+        icon.className = 'login-method-icon login-method-passkey';
+        icon.textContent = 'PK';
+        icon.setAttribute('aria-hidden', 'true');
+
+        const name = document.createElement('div');
+        name.className = 'login-method-name';
+        const strong = document.createElement('strong');
+        strong.textContent = passkey.name;
+        strong.title = passkey.name;
+        const detail = document.createElement('span');
+        detail.textContent = passkey.backed_up ? '已添加 · 可同步' : '已添加';
+        name.append(strong, detail);
+
+        const actions = document.createElement('div');
+        actions.className = 'login-method-actions';
+        const rename = document.createElement('button');
+        rename.type = 'button';
+        rename.className = 'btn-link';
+        rename.textContent = '重命名';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn-link btn-link-danger';
+        remove.textContent = '删除';
+
+        rename.addEventListener('click', async () => {
+          const nextName = window.prompt('通行密钥名称', passkey.name);
+          if (nextName === null || !nextName.trim() || nextName.trim() === passkey.name) return;
+          setLoading(rename, true);
+          try {
+            await api.patch(`/auth/passkeys/${encodeURIComponent(passkey.credential_id)}`, {
+              name: nextName.trim(),
+            }, { headers: api.getAuthHeaders() });
+            showSuccess('通行密钥已重命名');
+            await loadLoginMethods();
+          } catch (error) {
+            showError(error.message || '重命名失败');
+            setLoading(rename, false);
+          }
+        });
+
+        remove.addEventListener('click', async () => {
+          if (!window.confirm(`删除“${passkey.name}”后将无法再用它登录。确定继续？`)) return;
+          setLoading(remove, true);
+          try {
+            await api.delete(`/auth/passkeys/${encodeURIComponent(passkey.credential_id)}`, {
+              headers: api.getAuthHeaders(),
+            });
+            showSuccess('通行密钥已删除');
+            await loadLoginMethods();
+          } catch (error) {
+            showError(error.message || '删除通行密钥失败');
+            setLoading(remove, false);
+          }
+        });
+
+        actions.append(rename, remove);
+        row.append(icon, name, actions);
+        list.appendChild(row);
       }
 
       const linked = new Map(data.accounts.map((account) => [account.id, account]));
@@ -270,6 +338,34 @@ export async function renderSettings(app, api, navigate) {
       list.textContent = error.message || '登录方式加载失败';
     }
   }
+
+  const addPasskeyButton = document.getElementById('add-passkey-btn');
+  if (!isPasskeySupported()) {
+    addPasskeyButton.disabled = true;
+    addPasskeyButton.title = '当前浏览器不支持通行密钥';
+  }
+  addPasskeyButton.addEventListener('click', async () => {
+    const name = window.prompt('给这个通行密钥起个名称', '我的通行密钥');
+    if (name === null || !name.trim()) return;
+    setLoading(addPasskeyButton, true);
+    try {
+      const challenge = await api.post('/auth/passkeys/register/options', {}, {
+        headers: api.getAuthHeaders(),
+      });
+      const response = await startPasskeyRegistration(challenge.options);
+      await api.post('/auth/passkeys/register/verify', {
+        flow_id: challenge.flow_id,
+        name: name.trim(),
+        response,
+      }, { headers: api.getAuthHeaders() });
+      showSuccess('通行密钥添加成功');
+      await loadLoginMethods();
+    } catch (error) {
+      showError(error.message || '添加通行密钥失败');
+    } finally {
+      setLoading(addPasskeyButton, false);
+    }
+  });
 
   loadLoginMethods();
 

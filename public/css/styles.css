@@ -792,6 +792,22 @@ button:disabled {
   object-fit: contain;
 }
 
+.passkey-provider-icon,
+.login-method-passkey {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: rgb(var(--sekai-accent));
+  border: 1px solid currentColor;
+  border-radius: var(--sekai-radius-sm);
+  font-family: var(--sekai-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .external-provider--github img,
 .external-provider--x img,
 .provider-icon--github,
@@ -833,8 +849,16 @@ button:disabled {
   content: 'SIGN-IN METHODS';
 }
 
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
 .settings-section-head h3 {
-  margin: 0 0 14px;
+  margin: 0;
   color: rgb(var(--sekai-fg));
   font-size: var(--sekai-text-md);
   letter-spacing: 0;
@@ -864,6 +888,12 @@ button:disabled {
   font-weight: 700;
 }
 
+.login-method-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .login-method-name {
   display: flex;
   flex-direction: column;
@@ -873,6 +903,9 @@ button:disabled {
 .login-method-name strong {
   color: rgb(var(--sekai-fg));
   font-size: var(--sekai-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .login-method-name span,

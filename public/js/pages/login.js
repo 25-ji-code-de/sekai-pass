@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { encryptPassword, generateNonce, getFingerprint, showError, hideMessages, setLoading } from '../utils.js';
 import { createCaptcha } from '../captcha.js';
+import { isPasskeySupported, startPasskeyAuthentication } from '../webauthn.js';
 
 export function renderLogin(app, api, navigate) {
   const turnstileSiteKey = window.TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
@@ -88,9 +89,39 @@ export function renderLogin(app, api, navigate) {
     if (event.key === 'Escape' && !overlay.hidden) closeExternalLogin();
   });
 
+  async function loginWithPasskey(button) {
+    setLoading(button, true);
+    try {
+      const currentParams = new URLSearchParams(window.location.search);
+      const challenge = await api.post('/auth/passkeys/login/options', {});
+      const response = await startPasskeyAuthentication(challenge.options);
+      const result = await api.post('/auth/passkeys/login/verify', {
+        flow_id: challenge.flow_id,
+        response,
+      });
+      localStorage.setItem('token', result.token);
+      api.setAuthToken(result.token);
+      captcha.destroy();
+      closeExternalLogin();
+      navigate(currentParams.get('redirect') || '/');
+    } catch (error) {
+      showError(error.message || '通行密钥登录失败，请重试');
+      setLoading(button, false);
+    }
+  }
+
+  if (isPasskeySupported()) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'external-provider external-provider--passkey';
+    button.innerHTML = '<span class="passkey-provider-icon" aria-hidden="true">PK</span><span>使用通行密钥登录</span>';
+    button.addEventListener('click', () => loginWithPasskey(button));
+    providerList.appendChild(button);
+    externalSlot.hidden = false;
+  }
+
   api.get('/auth/external/providers').then(({ providers }) => {
     if (!Array.isArray(providers) || providers.length === 0) return;
-    providerList.replaceChildren();
     for (const provider of providers) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -121,7 +152,7 @@ export function renderLogin(app, api, navigate) {
     }
     externalSlot.hidden = false;
   }).catch(() => {
-    externalSlot.hidden = true;
+    if (!providerList.childElementCount) externalSlot.hidden = true;
   });
 
   form.addEventListener('submit', async (e) => {

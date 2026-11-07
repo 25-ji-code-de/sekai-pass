@@ -246,7 +246,7 @@ button:disabled {
   font-size: 11px;
   letter-spacing: 0.5px;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--sekai-radius-sm);
   background: rgba(var(--error-color) / 0.15);
 }
 
@@ -1405,10 +1405,6 @@ input[type="url"]:valid:not(:placeholder-shown) {
 .pow-icon {
   font-size: 16px;
   line-height: 1;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 
 /* ═══════════════════════════════════════════════════════════

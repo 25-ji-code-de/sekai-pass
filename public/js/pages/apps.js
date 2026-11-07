@@ -32,7 +32,7 @@ export async function renderApps(app, api, navigate) {
     <div class="container open-platform">
       <div class="open-platform-brand">
         <a href="/" data-link class="open-platform-home" title="返回仪表板">
-          <img src="/logo.png" alt="SEKAI Pass" width="180" />
+          <img src="/logo.svg" alt="SEKAI Pass" width="180" />
         </a>
       </div>
 

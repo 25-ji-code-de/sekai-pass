@@ -65,7 +65,7 @@ export function renderPage(title: string, content: string): string {
 <body>
   <div class="container">
     <div class="logo">
-      <img src="/logo.png" alt="SEKAI Pass" width="300" />
+      <img src="/logo.svg" alt="SEKAI Pass" width="300" />
     </div>
     ${content}
   </div>

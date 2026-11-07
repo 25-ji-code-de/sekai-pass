@@ -5,7 +5,7 @@ export function renderAbout(app, api, navigate) {
     <main class="about-page">
       <section class="about-shell" aria-labelledby="about-title">
         <div class="about-brand">
-          <img src="/logo.png" alt="SEKAI Pass" width="300" />
+          <img src="/logo.svg" alt="SEKAI Pass" width="300" />
           <span>SEKAI PASS // IDENTITY SERVICE</span>
         </div>
         <div class="about-rule"></div>

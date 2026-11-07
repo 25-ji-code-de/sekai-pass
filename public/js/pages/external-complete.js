@@ -20,7 +20,7 @@ export async function renderExternalComplete(app, api, navigate) {
   app.innerHTML = `
     <div class="container external-complete-container">
       <div class="logo">
-        <img src="/logo.png" alt="SEKAI Pass" width="300" />
+        <img src="/logo.svg" alt="SEKAI Pass" width="300" />
       </div>
       <div id="error-message" class="error" style="display: none;"></div>
       <div id="external-complete-loading" class="external-complete-loading">正在完成登录...</div>

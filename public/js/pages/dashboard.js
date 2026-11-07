@@ -13,7 +13,7 @@ export async function renderDashboard(app, api, navigate) {
   app.innerHTML = `
     <div class="container">
       <div class="logo">
-        <img src="/logo.png" alt="SEKAI Pass" width="300" />
+        <img src="/logo.svg" alt="SEKAI Pass" width="300" />
       </div>
       <div id="error-message" class="error" style="display: none;"></div>
       <div id="user-info" class="user-info">

@@ -20,7 +20,7 @@ export async function renderSettings(app, api, navigate) {
   app.innerHTML = `
     <div class="container settings-container">
       <div class="logo">
-        <img src="/logo.png" alt="SEKAI Pass" width="300" />
+        <img src="/logo.svg" alt="SEKAI Pass" width="300" />
       </div>
 
       <div class="settings-header">

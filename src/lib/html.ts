@@ -82,7 +82,12 @@ export function authorizePage(app: any, user: any): string {
   let redirectHost = 'Unknown';
   try {
     if (app.redirect_uri) {
-      redirectHost = new URL(app.redirect_uri).hostname;
+      const parsed = new URL(app.redirect_uri);
+      // 包名 deeplink（uk.nightcord.mobile://oauth/callback）的包名在 scheme 里，
+      // hostname 会被解析成路径第一段（如 "oauth"）；仅 http(s) 才取 hostname。
+      redirectHost = /^https?:$/.test(parsed.protocol)
+        ? parsed.hostname
+        : parsed.protocol.replace(':', '') || 'Unknown';
     }
   } catch (e) {}
 
